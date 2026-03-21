@@ -397,8 +397,8 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 
       <!-- Type de plat -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title" onclick="toggleSection(this)">🍽️ Type de plat <span class="chevron">▾</span></div>
-        <div class="section-body">
+        <div class="sidebar-section-title collapsed" onclick="toggleSection(this)">🍽️ Type de plat <span class="chevron">▾</span></div>
+        <div class="section-body collapsed">
         <div class="cat-list" id="catList">
           <!-- Généré dynamiquement après chargement -->
           <div style="font-size:.71rem;color:var(--muted)">Chargement…</div>
@@ -408,8 +408,8 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 
       <!-- Régimes -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title" onclick="toggleSection(this)">🥗 Régime alimentaire <span class="chevron">▾</span></div>
-        <div class="section-body">
+        <div class="sidebar-section-title collapsed" onclick="toggleSection(this)">🥗 Régime alimentaire <span class="chevron">▾</span></div>
+        <div class="section-body collapsed">
         <div class="diet-list">
           <div class="diet-item diet-vegan" data-diet="vegan" onclick="toggleDiet('vegan')">
             <span class="diet-icon">🌿</span>
@@ -435,8 +435,8 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 
       <!-- Saison -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title" onclick="toggleSection(this)">📅 Saison <span class="chevron">▾</span></div>
-        <div class="section-body">
+        <div class="sidebar-section-title collapsed" onclick="toggleSection(this)">📅 Saison <span class="chevron">▾</span></div>
+        <div class="section-body collapsed">
         <div class="season-list">
           <div class="season-item s-all sel" data-s="all"    onclick="setSeason('all')">   <span>🍽️</span> <span>Toutes saisons</span> </div>
           <div class="season-item s-p"       data-s="spring" onclick="setSeason('spring')"><span>🌸</span> <span>Printemps</span>      </div>
@@ -453,8 +453,8 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 
       <!-- Repas -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title" onclick="toggleSection(this)">🍽️ Repas <span class="chevron">▾</span></div>
-        <div class="section-body">
+        <div class="sidebar-section-title collapsed" onclick="toggleSection(this)">🍽️ Repas <span class="chevron">▾</span></div>
+        <div class="section-body collapsed">
         <div class="repas-row" style="margin-bottom:10px">
           <span class="repas-label">Nombre par semaine</span>
           <div class="repas-stepper">
@@ -482,8 +482,8 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 
       <!-- Protéine -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title" onclick="toggleSection(this)">💪 Option <span class="chevron">▾</span></div>
-        <div class="section-body">
+        <div class="sidebar-section-title collapsed" onclick="toggleSection(this)">💪 Option <span class="chevron">▾</span></div>
+        <div class="section-body collapsed">
         <div class="prot-row" id="protRow" onclick="toggleProt()">
           <span class="prot-row-icon">💪</span>
           <span class="prot-row-label">Protéine à chaque repas</span>
@@ -661,7 +661,7 @@ const COURSE_TYPE_MAP = {
 };
 const EXCLUDED_CATS = [12689, 13569, 29062, 34519, 55286, 55447, 79337];
 // Ajouter snack dans le mapping cours
-COURSE_TYPE_MAP['snack'] = [8608, 8607, 8606, 8604, 8602, 8603];  // tout sauf exclus
+COURSE_TYPE_MAP['snack'] = [8608];  // UNIQUEMENT Goûters et petits déjeuners
 const COURSE_LABELS = {entree:'Entrée', plat:'Plat', dessert:'Dessert', snack:'Recette'};
 const MOMENT_LABELS = {petitdej:'🌅 Petit-déj', dejeuner:'🌞 Déjeuner', gouter:'🌤️ Goûter', diner:'🌙 Dîner'};
 const COURSE_COLORS = {entree:'#e8f5e9|#2e7d32', plat:'#e3f2fd|#1565c0', dessert:'#fce4ec|#880e4f', snack:'#fff8e1|#f57f17'};
@@ -1318,14 +1318,22 @@ function generate(){
   const allServices = [...new Set([...services, 'snack'])];
   for(const svc of allServices){
     const catIds = COURSE_TYPE_MAP[svc] || [];
-    poolByCourse[svc] = pool.filter(r=>{
-      const rc = r.cats||[];
-      // Exclure les cats non-repas
-      if(rc.some(c=>EXCLUDED_CATS.includes(c)) && rc.every(c=>EXCLUDED_CATS.includes(c))) return false;
-      const hasCat = rc.some(c=>allKnownCats.filter(x=>!EXCLUDED_CATS.includes(x)).includes(c));
-      return !hasCat || rc.some(c=>catIds.includes(c));
-    });
-    if(!poolByCourse[svc].length) poolByCourse[svc] = pool;
+    if(svc === 'snack'){
+      // Pool snack : STRICT — uniquement les recettes avec cat 8608
+      poolByCourse[svc] = pool.filter(r => (r.cats||[]).includes(8608));
+      // Fallback si vide : tout ce qui a une cat goûter/dessert/cake
+      if(!poolByCourse[svc].length)
+        poolByCourse[svc] = pool.filter(r => (r.cats||[]).some(c=>[8608,8607,8606,8604].includes(c)));
+    } else {
+      const allKnownCats2 = Object.values(COURSE_TYPE_MAP).flat();
+      poolByCourse[svc] = pool.filter(r=>{
+        const rc = r.cats||[];
+        if(rc.length && rc.every(c=>EXCLUDED_CATS.includes(c))) return false;
+        const hasCat = rc.some(c=>allKnownCats2.includes(c) && !EXCLUDED_CATS.includes(c));
+        return !hasCat || rc.some(c=>catIds.includes(c));
+      });
+      if(!poolByCourse[svc].length) poolByCourse[svc] = pool;
+    }
   }
 
   // Générer : jours × moments × services
