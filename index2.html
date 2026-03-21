@@ -308,6 +308,7 @@ header h1 span{color:var(--sage-light);font-style:italic;}
     <button class="btn-menu-toggle" onclick="toggleSidebar()" aria-label="Menu">☰</button>
     <div>
       <h1>Menu <span>de la Semaine</span></h1>
+      <div style="font-size:.68rem;color:var(--sage-light);opacity:.75;margin-top:1px" id="headerSub"></div>
     </div>
   </div>
   <div class="header-right">
@@ -656,7 +657,7 @@ function detectSeasons(title,ings){ const t=(title+' '+ings.join(' ')).toLowerCa
 function detectStyle(title,ings){ const t=(title+' '+ings.join(' ')).toLowerCase(); for(const[c,kws]of STYLE_PATS)if(kws.some(k=>t.includes(k)))return c; return 'x'; }
 function hasProtein(r){ return PROT_KW.some(k=>(r.ings||[]).join(' ').toLowerCase().includes(k)); }
 function protTip(r){ const t=PROT_TIPS[r.style]||PROT_TIPS.x; return t[Math.floor(Math.random()*t.length)]; }
-function setLoad(txt,pct){ document.getElementById('loadTxt').textContent=txt; document.getElementById('loadBar').style.width=pct+'%'; }
+function setLoad(txt,pct){ setEl('loadTxt','textContent',txt); const _lb=document.getElementById('loadBar'); if(_lb)_lb.style.width=pct+'%'; }
 
 /* ============================================================
    FILTRES ALIMENTAIRES
@@ -708,7 +709,7 @@ async function init(){
   if(cfg){ st.token = cfg.token||null; st.sites = cfg.sites||[]; }
   if(!cfg || !st.token){
     document.getElementById('setupScreen').style.display='block';
-    document.getElementById('headerSub').textContent='Configuration';
+    setEl('headerSub','textContent','Configuration');
     renderSiteList('setupSiteList');
     return;
   }
@@ -815,8 +816,8 @@ function removeSite(i){ st.sites.splice(i,1); renderSiteList('setupSiteList'); r
    CHARGEMENT
    ============================================================ */
 async function startLoading(){
-  document.getElementById('loadScreen').style.display='block';
-  document.getElementById('app').style.display='none';
+  const _ls=document.getElementById('loadScreen'); if(_ls)_ls.style.display='block';
+  const _ap=document.getElementById('app'); if(_ap)_ap.style.display='none';
   let berg=[], extra=[];
 
   if(st.token){
@@ -835,8 +836,8 @@ async function startLoading(){
   const parts=[];
   if(berg.length) parts.push(`${berg.length.toLocaleString('fr')} Bergamot`);
   if(extra.length) parts.push(`${extra.length} sites perso`);
-  document.getElementById('headerSub').textContent = parts.join(' · ') || 'Aucune source connectée';
-  document.getElementById('hcount').textContent = `🌿 ${st.allRecipes.length.toLocaleString('fr')} recettes`;
+  setEl('headerSub','textContent', parts.join(' · ') || 'Aucune source connectée');
+  setEl('hcount','textContent', `🌿 ${st.allRecipes.length.toLocaleString('fr')} recettes`);
 
   document.getElementById('loadScreen').style.display='none';
   document.getElementById('app').style.display='block';
@@ -1236,6 +1237,12 @@ function toggleCourses(){
   const s=document.getElementById('coursesSection');
   if(st.courses){s.classList.add('on');if(st.menu.length)renderCourses();s.scrollIntoView({behavior:'smooth',block:'start'});}
   else s.classList.remove('on');
+}
+
+
+function setEl(id, prop, val){
+  const el = document.getElementById(id);
+  if(el) el[prop] = val;
 }
 
 /* ============================================================
