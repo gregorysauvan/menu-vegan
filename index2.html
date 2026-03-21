@@ -354,14 +354,12 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .repas-bar-label{font-size:.78rem;font-weight:500;color:var(--muted);white-space:nowrap;}
 .repas-bar-sep{width:1px;height:20px;background:var(--warm);}
 
-/* Vue colonnes : multi-lignes lisibles */
-#grid.view-columns{display:flex!important;flex-wrap:wrap;gap:12px;align-items:flex-start;}
-#grid.view-columns > div{flex:1 1 200px;min-width:180px;max-width:260px;}
-@media(max-width:640px){
-  #grid.view-columns > div{flex:1 1 calc(50% - 6px);min-width:140px;max-width:none;}
+/* Vue colonnes : 3 colonnes sur desktop, 2 sur mobile */
+@media(max-width:700px){
+  #grid[style*="repeat(3"]{grid-template-columns:repeat(2,1fr)!important;}
 }
-@media(max-width:400px){
-  #grid.view-columns > div{flex:1 1 100%;}
+@media(max-width:440px){
+  #grid[style*="repeat"]{grid-template-columns:1fr!important;}
 }
 
 /* Mobile sidebar overlay */
@@ -716,11 +714,13 @@ const SNACK_CATS = [8608, 8607, 8606, 8604];  // Goûter/petit-déj, Pain, Cake,
 const COURSE_TYPE_MAP = {
   entree:  [8602, 15947, 8610, 31409],            // Entrée, Salade, Apéritif, Sandwich
   plat:    [8603, 16929, 15982, 35459, 35460],     // Plat principal, Tarte, Soupe, Simili, Boulettes
+  // 8607=Pain/viennoiseries → uniquement dans snack, PAS dans plat
   dessert: [8604, 8606, 8608],                     // Dessert, Cake, Goûter
   // catégories exclues des menus : 12689=Sauce, 13569=Fromage, 29062=Lait végétal,
   // 34519=Crémerie, 55286=Tartinade, 55447=Boisson, 79337=Crème chocolat
 };
 const EXCLUDED_CATS = [12689, 13569, 29062, 34519, 55286, 55447, 79337];
+const PLAT_EXCLUDED = [8607, 8608, 8604, 8606];  // pain, goûter, dessert, cake → hors plat
 // Ajouter snack dans le mapping cours
 COURSE_TYPE_MAP['snack'] = [8608];  // UNIQUEMENT Goûters et petits déjeuners
 const COURSE_LABELS = {entree:'Entrée', plat:'Plat', dessert:'Dessert', snack:'Recette'};
@@ -1413,6 +1413,8 @@ function generate(){
       poolByCourse[svc] = pool.filter(r=>{
         const rc = r.cats||[];
         if(rc.length && rc.every(c=>EXCLUDED_CATS.includes(c))) return false;
+        // Pour 'plat' : exclure les recettes pain/goûter/dessert
+        if(svc==='plat' && rc.some(c=>PLAT_EXCLUDED.includes(c)) && !rc.some(c=>[8603,16929,15982,35459,35460].includes(c))) return false;
         const hasCat = rc.some(c=>allKnownCats2.includes(c) && !EXCLUDED_CATS.includes(c));
         return !hasCat || rc.some(c=>catIds.includes(c));
       });
@@ -1546,24 +1548,46 @@ function renderAgenda(g){
 function renderColumns(g){
   const MOMENT_ORDER3=['petitdej','dejeuner','gouter','diner'];
   const moments=MOMENT_ORDER3.filter(m=>st.mealTypes.has(m));
+  const N = st.menu.length;
 
-  g.className = 'grid view-columns';
-  g.style.display = '';  // géré par CSS
-  g.style.gridTemplateColumns = '';
+  // 3 colonnes fixes, cartes larges
+  g.style.display = 'grid';
+  g.style.gridTemplateColumns = 'repeat(3, 1fr)';
+  g.style.gap = '12px';
+  g.className = 'grid';
 
   st.menu.forEach((day, di)=>{
     const card = document.createElement('div');
-    card.style.cssText = 'background:var(--white);border:1px solid var(--warm);border-radius:10px;overflow:hidden;display:flex;flex-direction:column';
+    card.style.cssText = [
+      'background:var(--white)',
+      'border:1px solid var(--warm)',
+      'border-radius:12px',
+      'overflow:hidden',
+      'display:flex',
+      'flex-direction:column',
+      'min-height:200px',
+    ].join(';');
 
-    let h = `<div style="background:#4a6e50;color:#fff;padding:6px 10px;font-size:11px;font-weight:500;text-align:center">${day.name}</div>`;
+    let h = `<div style="background:#4a6e50;color:#fff;padding:8px 14px;font-size:13px;font-weight:600;letter-spacing:.3px">${day.name}</div>`;
 
     for(const mt of moments){
       const mtLabel = MOMENT_LABELS[mt]||mt;
       const svcs = getMtServices(mt);
-      h += `<div style="padding:8px 10px;border-bottom:0.5px solid var(--warm)">`;
-      h += `<div style="font-size:10px;font-weight:500;color:var(--muted);margin-bottom:6px">${mtLabel}</div>`;
+      const isLast = moments.indexOf(mt)===moments.length-1;
+      h += `<div style="padding:10px 14px;${isLast?'':'border-bottom:1px solid var(--warm)'}">`;
+      h += `<div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px">${mtLabel}</div>`;
       for(const svc of svcs){
-        h += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
+        const r = day.meals[mt]?.[svc];
+        if(!r){
+          h += `<div style="font-size:12px;color:var(--muted);padding:3px 0">—</div>`;
+          continue;
+        }
+        const [bg,col] = (COURSE_COLORS[svc]||'var(--warm)|var(--earth)').split('|');
+        h += `<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 0;border-bottom:1px dashed var(--warm)">
+          <span style="font-size:10px;padding:2px 6px;border-radius:8px;background:${bg};color:${col};flex-shrink:0;margin-top:1px">${COURSE_LABELS[svc]||svc}</span>
+          <span style="font-size:12px;flex:1;cursor:pointer;line-height:1.4;color:var(--ink)" onclick="openModalItem(${di},'${mt}','${svc}')">${r.title}</span>
+          <button onclick="event.stopPropagation();swapItem(${di},'${mt}','${svc}')" style="background:none;border:1px solid var(--warm);border-radius:5px;padding:2px 7px;font-size:11px;color:var(--muted);cursor:pointer;flex-shrink:0;white-space:nowrap;touch-action:manipulation">↻</button>
+        </div>`;
       }
       h += `</div>`;
     }
