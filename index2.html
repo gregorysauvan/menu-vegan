@@ -683,20 +683,31 @@ function applyDietFilters(){
 function toggleDiet(diet){
   if(st.diets.has(diet)) st.diets.delete(diet);
   else st.diets.add(diet);
-  document.querySelector(`[data-diet="${diet}"]`).classList.toggle('sel', st.diets.has(diet));
+  // Mettre à jour les pills de l'ancienne barre (si présente)
+  const pill = document.querySelector(`[data-diet="${diet}"]`);
+  if(pill) pill.classList.toggle('sel', st.diets.has(diet));
+  // Mettre à jour les items sidebar
+  document.querySelectorAll('.diet-item').forEach(el=>{
+    el.classList.toggle('active', st.diets.has(el.getAttribute('data-diet')));
+  });
   applyDietFilters();
 }
 
 function updatePoolInfo(){
-  const el = document.getElementById('poolInfo');
-  if(!el) return;
-  const total = st.allRecipes.length;
+  const total    = st.allRecipes.length;
   const filtered = st.pool.length;
-  const dietLabels = [...st.diets].map(d=>DIET_FILTERS[d]?.label||d).join(' + ');
-  if(st.diets.size){
-    el.textContent = `${filtered.toLocaleString('fr')} recettes correspondent (${dietLabels}) sur ${total.toLocaleString('fr')} au total`;
-  } else {
-    el.textContent = `${total.toLocaleString('fr')} recettes disponibles — aucun filtre alimentaire actif`;
+  // Sidebar
+  const cnt = document.getElementById('poolCount');
+  const box = document.getElementById('poolInfo');
+  if(cnt) cnt.textContent = filtered.toLocaleString('fr');
+  if(box) box.style.borderLeft = (st.diets.size && filtered < total) ? '3px solid var(--sage-dark)' : '';
+  // Ancien élément texte (si présent)
+  const el = document.getElementById('poolInfoText');
+  if(el){
+    const dietLabels = [...st.diets].map(d=>DIET_FILTERS[d]?.label||d).join(' + ');
+    el.textContent = st.diets.size
+      ? `${filtered.toLocaleString('fr')} recettes (${dietLabels}) sur ${total.toLocaleString('fr')}`
+      : `${total.toLocaleString('fr')} recettes disponibles`;
   }
 }
 
@@ -1082,14 +1093,32 @@ function disconnectBerg(){ st.token=null; saveCfg(); renderSetBerg(); }
 function autoSeason(){ const m=new Date().getMonth()+1; return m>=3&&m<=5?'spring':m>=6&&m<=8?'summer':m>=9&&m<=11?'autumn':'winter'; }
 function setSeason(s){
   st.season=s;
+  // Pills barre de contrôle (si présentes)
   document.querySelectorAll('.sp').forEach(p=>p.classList.remove('sel'));
-  document.querySelector(`[data-s="${s}"]`).classList.add('sel');
-  const sb=document.getElementById('strictBtn');
-  sb.style.display=s==='all'?'none':'inline-flex';
-  if(s==='all'){st.strict=false;sb.classList.remove('on');}
+  const sp = document.querySelector(`[data-s="${s}"]`);
+  if(sp) sp.classList.add('sel');
+  const sb = document.getElementById('strictBtn');
+  if(sb){ sb.style.display=s==='all'?'none':'inline-flex'; }
+  if(s==='all'){ st.strict=false; if(sb) sb.classList.remove('on'); }
+  // Items sidebar
+  document.querySelectorAll('.season-item').forEach(el=>{
+    el.classList.toggle('sel', el.getAttribute('data-s')===s);
+  });
+  const sr = document.getElementById('strictRow');
+  if(sr) sr.style.display = s==='all'?'none':'flex';
+  if(s==='all' && sr) sr.classList.remove('on');
 }
-function toggleStrict(){ st.strict=!st.strict; document.getElementById('strictBtn').classList.toggle('on',st.strict); }
-function toggleProt(){ st.prot=!st.prot; document.getElementById('protBtn').classList.toggle('on',st.prot); if(st.menu.length)renderMenus(); }
+function toggleStrict(){
+  st.strict=!st.strict;
+  const sb=document.getElementById('strictBtn'); if(sb) sb.classList.toggle('on',st.strict);
+  const sr=document.getElementById('strictRow'); if(sr) sr.classList.toggle('on',st.strict);
+}
+function toggleProt(){
+  st.prot=!st.prot;
+  const pb=document.getElementById('protBtn'); if(pb) pb.classList.toggle('on',st.prot);
+  const pr=document.getElementById('protRow'); if(pr) pr.classList.toggle('on',st.prot);
+  if(st.menu.length) renderMenus();
+}
 
 /* ============================================================
    IDÉES & STOCK
@@ -1153,8 +1182,13 @@ function seasonBadges(r){
 function renderMenus(){
   const N=parseInt(document.getElementById('mealCount').value)||6;
   const g=document.getElementById('grid');
+  if(!g) return;
   const w=window.innerWidth;
-  const cols=w<=480?Math.min(N,2):w<=780?Math.min(N,2):w<=1100?Math.min(N,3):N<=6?3:N<=8?4:5;
+  let cols;
+  if(w<=480)      cols=Math.min(N,2);
+  else if(w<=700) cols=Math.min(N,2);
+  else if(w<=1000)cols=Math.min(N,3);
+  else            cols=N<=6?3:N<=8?4:5;
   g.style.gridTemplateColumns=`repeat(${cols},1fr)`;
   g.innerHTML='';
   st.menu.forEach((r,i)=>{
@@ -1275,97 +1309,17 @@ function changeRepas(delta){
 }
 
 /* ── OVERRIDE : toggleDiet met à jour les items sidebar ── */
-const _toggleDietOrig = toggleDiet;
-function toggleDiet(diet){
-  _toggleDietOrig(diet);
-  document.querySelectorAll('.diet-item').forEach(el=>{
-    const d = el.getAttribute('data-diet');
-    el.classList.toggle('active', st.diets.has(d));
-  });
-}
 
-/* ── OVERRIDE : setSeason met à jour les items sidebar ── */
-const _setSeasonOrig = setSeason;
-function setSeason(s){
-  st.season = s;
-  document.querySelectorAll('.season-item').forEach(el=>{
-    el.classList.toggle('sel', el.getAttribute('data-s') === s);
-  });
-  const sr = document.getElementById('strictRow');
-  if(sr) sr.style.display = s==='all' ? 'none' : 'flex';
-  if(s==='all'){st.strict=false; document.getElementById('strictRow')?.classList.remove('on');}
-}
 
-/* ── OVERRIDE : toggleStrict sidebar ── */
-function toggleStrict(){
-  st.strict = !st.strict;
-  const sr = document.getElementById('strictRow');
-  if(sr) sr.classList.toggle('on', st.strict);
-}
 
-/* ── OVERRIDE : toggleProt sidebar ── */
-const _toggleProtOrig = toggleProt;
-function toggleProt(){
-  st.prot = !st.prot;
-  document.getElementById('protRow')?.classList.toggle('on', st.prot);
-  document.getElementById('protCheck')?.classList.toggle('diet-check', true);
-  if(st.menu.length) renderMenus();
-}
 
-/* ── OVERRIDE : updatePoolInfo sidebar ── */
-function updatePoolInfo(){
-  const count = document.getElementById('poolCount');
-  const box = document.getElementById('poolInfo');
-  if(!count) return;
-  const total = st.allRecipes.length;
-  const filtered = st.pool.length;
-  count.textContent = filtered.toLocaleString('fr');
-  if(st.diets.size && filtered < total){
-    box.style.borderLeft = '3px solid var(--sage-dark)';
-  } else {
-    box.style.borderLeft = '';
-  }
-}
 
-/* ── OVERRIDE : renderMenus adapte les colonnes ── */
-const _renderMenusOrig = renderMenus;
-function renderMenus(){
-  const N = parseInt(document.getElementById('mealCount').value) || 6;
-  const g = document.getElementById('grid');
-  const w = window.innerWidth;
-  // Avec la sidebar, on a moins de place
-  let cols;
-  if(w <= 480)       cols = Math.min(N, 2);
-  else if(w <= 700)  cols = Math.min(N, 2);
-  else if(w <= 1000) cols = Math.min(N, 3);
-  else               cols = N <= 6 ? 3 : N <= 8 ? 4 : 5;
-  g.style.gridTemplateColumns = `repeat(${cols},1fr)`;
-  g.innerHTML = '';
-  st.menu.forEach((r,i)=>{
-    const sc=ideaScore(r), isSeason=st.season!=='all'&&(!r.seasons||r.seasons.includes(SC[st.season]));
-    const isBerg=r.src==='berg';
-    const d=document.createElement('div'); d.className='card';
-    d.onclick = ()=>openModal(i);
-    d.innerHTML=`
-      <div class="card-day">${DAYS[i]}<span class="meal-pill">${MEALS[i]}</span></div>
-      ${r.photo?`<img class="card-img" src="${r.photo}" alt="" loading="lazy" onerror="this.style.display='none'">`:`<div class="card-nophoto">🍽️</div>`}
-      <div class="card-body">
-        <div class="card-title">${r.title}</div>
-        <div class="card-ings">${r.ings.slice(0,4).join(' · ')}${r.ings.length>4?'…':''}</div>
-        <div class="card-seasons">${seasonBadges(r)}${!isBerg?`<span class="bdg" style="background:#f5f0ff;color:#5e35b1;font-size:.57rem">${r.src}</span>`:''}</div>
-        <div class="card-foot">
-          ${r.time?`<span class="bdg bdg-t">⏱${r.time}m</span>`:''}
-          ${sc>0?'<span class="bdg bdg-m">✨</span>':''}
-          ${isSeason?'<span class="bdg bdg-s">✓</span>':''}
-          ${stockScore(r)>0?'<span class="bdg bdg-stk">🧺</span>':''}
-          ${hasProtein(r)?'<span class="bdg bdg-prot">💪</span>':''}
-          <button class="btn-swap" onclick="event.stopPropagation();swapMeal(${i})">↻</button>
-        </div>
-        ${st.prot&&!hasProtein(r)?`<div class="prot-tip">${protTip(r)}</div>`:''}
-      </div>`;
-    g.appendChild(d);
-  });
-}
+
+
+
+
+
+
 
 /* Init sidebar saison au chargement */
 document.addEventListener('DOMContentLoaded', ()=>{
