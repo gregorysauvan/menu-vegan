@@ -1312,10 +1312,11 @@ function generate(){
   const allSnack = [...st.mealTypes].every(m => SNACK_MOMENTS.has(m));
   const services = allSnack ? ['snack'] : [...st.courseTypes];
 
-  // Construire un pool par service
+  // Construire un pool par service (inclure toujours 'snack' pour les moments snack)
   const poolByCourse = {};
   const allKnownCats = Object.values(COURSE_TYPE_MAP).flat();
-  for(const svc of services){
+  const allServices = [...new Set([...services, 'snack'])];
+  for(const svc of allServices){
     const catIds = COURSE_TYPE_MAP[svc] || [];
     poolByCourse[svc] = pool.filter(r=>{
       const rc = r.cats||[];
@@ -1406,40 +1407,51 @@ function recipeRow(r, dayIdx, moment, svc){
   </div>`;
 }
 
+function getMtServices(mt){
+  // Pour un moment donné, retourner les services appropriés
+  return SNACK_MOMENTS.has(mt) ? ['snack'] : [...st.courseTypes];
+}
+
 function renderAgenda(g){
   g.className = 'grid';
   g.style.display = 'flex';
   g.style.flexDirection = 'column';
   g.style.gap = '10px';
 
-  const moments  = [...st.mealTypes];
-  const services = [...st.courseTypes];
+  const moments = [...st.mealTypes];
 
   st.menu.forEach((day, di)=>{
     const card = document.createElement('div');
-    card.style.cssText = 'background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden';
+    card.style.cssText = 'background:var(--white);border:1px solid var(--warm);border-radius:10px;overflow:hidden';
 
-    let html = `<div style="background:#4a6e50;color:#fff;padding:6px 12px;font-size:12px;font-weight:500">${day.name}</div>`;
-    html += `<div style="display:grid;grid-template-columns:${moments.map(()=>'1fr').join(' ')};border-bottom:none">`;
+    // Header jour
+    let h = `<div style="background:#4a6e50;color:#fff;padding:6px 12px;font-size:12px;font-weight:500">${day.name}</div>`;
+
+    // Si 1 seul moment → pas de grid, affichage direct
+    // Si plusieurs moments → grid
+    const cols = moments.length > 1 ? moments.map(()=>'1fr').join(' ') : '1fr';
+    h += `<div style="display:grid;grid-template-columns:${cols}">`;
 
     for(const mt of moments){
-      const mtLabel = mt==='dejeuner'?'🌞 Déjeuner':'🌙 Dîner';
-      html += `<div style="padding:8px 10px;border-right:0.5px solid var(--color-border-tertiary)">`;
-      html += `<div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-bottom:6px">${mtLabel}</div>`;
-      for(const svc of services){
-        html += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
+      const mtLabel = MOMENT_LABELS[mt] || mt;
+      const svcs = getMtServices(mt);
+      const borderRight = moments.indexOf(mt) < moments.length-1
+        ? 'border-right:1px solid var(--warm);' : '';
+      h += `<div style="padding:8px 10px;${borderRight}">`;
+      h += `<div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:6px">${mtLabel}</div>`;
+      for(const svc of svcs){
+        h += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
       }
-      html += `</div>`;
+      h += `</div>`;
     }
-    html += `</div>`;
-    card.innerHTML = html;
+    h += `</div>`;
+    card.innerHTML = h;
     g.appendChild(card);
   });
 }
 
 function renderColumns(g){
   const moments  = [...st.mealTypes];
-  const services = [...st.courseTypes];
 
   g.className = 'grid view-columns';
   g.style.display = '';  // géré par CSS
@@ -1453,9 +1465,10 @@ function renderColumns(g){
 
     for(const mt of moments){
       const mtLabel = MOMENT_LABELS[mt]||mt;
+      const svcs = getMtServices(mt);
       h += `<div style="padding:8px 10px;border-bottom:0.5px solid var(--warm)">`;
       h += `<div style="font-size:10px;font-weight:500;color:var(--muted);margin-bottom:6px">${mtLabel}</div>`;
-      for(const svc of services){
+      for(const svc of svcs){
         h += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
       }
       h += `</div>`;
