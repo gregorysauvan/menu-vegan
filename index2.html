@@ -1064,32 +1064,65 @@ async function startLoading(){
   }
   for(const site of st.sites){
     try {
-      // Cache par site — clé basée sur l'URL
-      const ck = 'extR_' + btoa(site.url).replace(/[^a-z0-9]/gi,'').slice(0,20);
-      const cm = 'extM_' + btoa(site.url).replace(/[^a-z0-9]/gi,'').slice(0,20);
       let siteRecipes = null;
-      try {
-        const meta = JSON.parse(localStorage.getItem(cm)||'{}');
-        if(Date.now() - (meta.ts||0) < 7200000){ // 2h
-          const cached = JSON.parse(localStorage.getItem(ck)||'null');
-          if(cached && cached.length > 0){
-            siteRecipes = cached;
-            setLoad(`${site.name||site.url} depuis le cache…`, 88);
-            console.log(`[Cache ext] ${site.name}: ${cached.length} recettes`);
-          }
-        }
-      } catch(e){}
+      const ckL = 'extR_' + btoa(site.url).replace(/[^a-z0-9]/gi,'').slice(0,20);
+      const cmL = 'extM_' + btoa(site.url).replace(/[^a-z0-9]/gi,'').slice(0,20);
 
+      if(!window._forceReload){
+        // A. Essayer Netlify Blobs (cache serveur)
+        try {
+          const br = await fetch(`/.netlify/functions/external-recipes?action=get&url=${encodeURIComponent(site.url)}`,
+            {signal:AbortSignal.timeout(5000)});
+          if(br.ok && br.status === 200){
+            const bdata = await br.json();
+            if(bdata && bdata.length > 0){
+              siteRecipes = bdata;
+              setLoad(`${site.name||site.url} (cache serveur)…`, 88);
+              console.log(`[Blobs ext] ${site.name}: ${bdata.length} recettes`);
+            }
+          }
+        } catch(e){ console.warn('[Blobs ext] get:', e); }
+
+        // B. Essayer localStorage si Blobs raté
+        if(!siteRecipes){
+          try {
+            const meta = JSON.parse(localStorage.getItem(cmL)||'{}');
+            if(Date.now()-(meta.ts||0) < 7200000){
+              const cached = JSON.parse(localStorage.getItem(ckL)||'null');
+              if(cached && cached.length > 0){
+                siteRecipes = cached;
+                setLoad(`${site.name||site.url} (cache local)…`, 88);
+              }
+            }
+          } catch(e){}
+        }
+      }
+
+      // C. Charger depuis le site si pas de cache
       if(!siteRecipes){
         setLoad(`Chargement ${site.name||site.url}…`, 88);
         siteRecipes = await loadExternalSite(site);
-        try {
-          localStorage.setItem(ck, JSON.stringify(siteRecipes));
-          localStorage.setItem(cm, JSON.stringify({ts: Date.now()}));
-        } catch(e){ console.warn('ExtCache write:', e); }
+
+        if(siteRecipes.length){
+          // Sauvegarder dans localStorage
+          try {
+            localStorage.setItem(ckL, JSON.stringify(siteRecipes));
+            localStorage.setItem(cmL, JSON.stringify({ts:Date.now()}));
+          } catch(e){}
+
+          // Sauvegarder dans Netlify Blobs
+          try {
+            await fetch(`/.netlify/functions/external-recipes?action=set&url=${encodeURIComponent(site.url)}&name=${encodeURIComponent(site.name||'')}&type=${encodeURIComponent(site.type||'')}`, {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify(siteRecipes),
+              signal: AbortSignal.timeout(10000),
+            });
+          } catch(e){ console.warn('[Blobs ext] set:', e); }
+        }
       }
 
-      extra = extra.concat(siteRecipes);
+      extra = extra.concat(siteRecipes || []);
     } catch(e){ console.warn('Site ext:', e); }
   }
 
@@ -1131,16 +1164,23 @@ async function startLoading(){
 }
 
 async function loadBergamot(){
-  const CK = 'bergR_v5', CM = 'bergM_v5', TTL = 30*60*1000;
+  const CK = 'bergR_v5', CM = 'bergM_v5', TTL = 5*60*1000;  // 5 min local, Blobs = 7 jours
 
-  // ── Lire le cache (sauf si forceReload demandé) ───────────
+  // ── A. Netlify Blobs (cache serveur, partagé entre appareils) ──
+  // On appelle le proxy qui gère lui-même le cache Blobs
+  // Si le proxy a un cache valide → réponse instantanée avec X-Cache: HIT
+  // Sinon → il charge depuis Bergamot, sauvegarde en Blobs et retourne
+
+  setLoad('Connexion au cache serveur…', 10);
+
+  // ── B. localStorage (cache local, instantané) ──
   if(!window._forceReload){
     try {
       const m = JSON.parse(localStorage.getItem(CM)||'{}');
       if(Date.now()-(m.ts||0) < TTL && m.tok === st.token.slice(-8)){
         const c = JSON.parse(localStorage.getItem(CK)||'null');
         if(c && c.length > 0){
-          setLoad(`Cache : ${c.length} recettes`, 70);
+          setLoad(`Cache local : ${c.length} recettes`, 70);
           return c.map(r => toRecipe(r));
         }
       }
@@ -1148,44 +1188,37 @@ async function loadBergamot(){
   }
   window._forceReload = false;
 
-  // ── Appeler le proxy Netlify Function ─────────────────────
-  // Le proxy filtre et allège le JSON côté serveur : ~500Ko au lieu de 8Mo
-  setLoad('Connexion à Bergamot…', 10);
-  const proxyUrl = '/.netlify/functions/bergamot-recipes';
+  // ── C. Appel proxy (Blobs ou Bergamot direct) ──
+  setLoad('Chargement des recettes…', 20);
+  const ctrl = new AbortController();
+  const tmo  = setTimeout(()=>ctrl.abort(), 60000);
   let res;
   try {
-    const ctrl = new AbortController();
-    const tmo  = setTimeout(()=>ctrl.abort(), 30000);
-    try {
-      res = await fetch(proxyUrl, {
-        headers:{'Authorization':`Bearer ${st.token}`},
-        signal: ctrl.signal
-      });
-    } finally { clearTimeout(tmo); }
-  } catch(e){
-    // Fallback : appel direct si le proxy n'est pas dispo (dev local)
-    console.warn('Proxy indispo, appel direct…', e);
-    return await loadBergamotDirect();
-  }
+    res = await fetch('/.netlify/functions/bergamot-recipes', {
+      headers:{'Authorization':`Bearer ${st.token}`},
+      signal: ctrl.signal
+    });
+  } finally { clearTimeout(tmo); }
 
   if(!res.ok) throw new Error(`Proxy HTTP ${res.status}`);
 
-  setLoad('Réception des recettes…', 40);
-  const compact = await res.json();
-  setLoad('Traitement…', 70);
+  const fromBlobs = res.headers.get('X-Cache') === 'HIT';
+  setLoad(fromBlobs ? 'Recettes depuis le cache serveur…' : 'Traitement des recettes…', 60);
 
+  const compact = await res.json();
   const out = compact.map(r => toRecipe(r));
 
-  // Mettre en cache
+  // ── D. Sauvegarder dans localStorage ──
+  setLoad('Mise en cache locale…', 85);
   try {
     localStorage.setItem(CK, JSON.stringify(compact));
     localStorage.setItem(CM, JSON.stringify({ts:Date.now(), tok:st.token.slice(-8)}));
-  } catch(e){ console.warn('Cache write:', e); }
+  } catch(e){ console.warn('localStorage write:', e); }
 
   return out;
 }
 
-// Convertit le format compact {id,t,p,tm,in,st} vers le format interne
+
 function toRecipe(r){
   const ings  = r.in || r.ings || [];
   const title = r.t  || r.title || '';
@@ -1383,8 +1416,10 @@ async function saveAndReload(){ saveCfg(); closeSettings(); st.allRecipes=[]; st
 async function forceRefresh(){
   if(!confirm('Recharger toutes les recettes depuis Bergamot ?\n(peut prendre ~30 secondes)')) return;
   await clearBergamotCache();
-  // Vider aussi le cache des sites externes
+  // Vider localStorage (sites externes + bergamot)
   Object.keys(localStorage).filter(k=>k.startsWith('extR_')||k.startsWith('extM_')).forEach(k=>localStorage.removeItem(k));
+  // Note: les Blobs serveur expirent automatiquement après 30min/2h
+  // On force le rechargement malgré un cache Blobs valide via _forceReload
   window._forceReload = true;  // bypass cache même si TTL pas expiré
   st.allRecipes=[]; st.menu=[];
   const ap = document.getElementById('app');
