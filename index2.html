@@ -851,81 +851,104 @@ async function startLoading(){
 }
 
 async function loadBergamot(){
-  // ── Cache localStorage : évite de re-télécharger 8 Mo à chaque visite ──
-  const CACHE_KEY  = 'bergRecipes_v3';
-  const CACHE_META = 'bergRecipesMeta_v3';
-  const CACHE_TTL  = 30 * 60 * 1000; // 30 min
+  const CK = 'bergR_v5', CM = 'bergM_v5', TTL = 30*60*1000;
 
+  // ── Lire le cache ──────────────────────────────────────────
   try {
-    const meta = JSON.parse(localStorage.getItem(CACHE_META)||'{}');
-    const age  = Date.now() - (meta.ts||0);
-    if(age < CACHE_TTL && meta.token === st.token){
-      setLoad('Chargement depuis le cache…', 40);
-      const cached = JSON.parse(localStorage.getItem(CACHE_KEY)||'[]');
-      if(cached.length > 0){
-        setLoad('Cache chargé ✓', 70);
-        console.log(`[Bergamot] Cache: ${cached.length} recettes (${Math.round(age/1000)}s)`);
-        return cached;
+    const m = JSON.parse(localStorage.getItem(CM)||'{}');
+    if(Date.now()-(m.ts||0) < TTL && m.tok === st.token.slice(-8)){
+      const c = JSON.parse(localStorage.getItem(CK)||'null');
+      if(c && c.length > 0){
+        setLoad(`Cache : ${c.length} recettes`, 70);
+        return c.map(r => toRecipe(r));
       }
     }
-  } catch(e){ console.warn('Cache lecture:', e); }
+  } catch(e){}
 
-  // Pas de cache valide → télécharger
+  // ── Appeler le proxy Netlify Function ─────────────────────
+  // Le proxy filtre et allège le JSON côté serveur : ~500Ko au lieu de 8Mo
   setLoad('Connexion à Bergamot…', 10);
-  const ctrl = new AbortController();
-  const tmo  = setTimeout(()=>ctrl.abort(), 60000);
+  const proxyUrl = '/.netlify/functions/bergamot-recipes';
   let res;
   try {
-    res = await fetch(`${BERG_API}/recipes/`, {
-      headers:{'Authorization':`Bearer ${st.token}`},
-      signal: ctrl.signal
-    });
+    const ctrl = new AbortController();
+    const tmo  = setTimeout(()=>ctrl.abort(), 30000);
+    try {
+      res = await fetch(proxyUrl, {
+        headers:{'Authorization':`Bearer ${st.token}`},
+        signal: ctrl.signal
+      });
+    } finally { clearTimeout(tmo); }
+  } catch(e){
+    // Fallback : appel direct si le proxy n'est pas dispo (dev local)
+    console.warn('Proxy indispo, appel direct…', e);
+    return await loadBergamotDirect();
+  }
+
+  if(!res.ok) throw new Error(`Proxy HTTP ${res.status}`);
+
+  setLoad('Réception des recettes…', 40);
+  const compact = await res.json();
+  setLoad('Traitement…', 70);
+
+  const out = compact.map(r => toRecipe(r));
+
+  // Mettre en cache
+  try {
+    localStorage.setItem(CK, JSON.stringify(compact));
+    localStorage.setItem(CM, JSON.stringify({ts:Date.now(), tok:st.token.slice(-8)}));
+  } catch(e){ console.warn('Cache write:', e); }
+
+  return out;
+}
+
+// Convertit le format compact {id,t,p,tm,in,st} vers le format interne
+function toRecipe(r){
+  const ings  = r.in || r.ings || [];
+  const title = r.t  || r.title || '';
+  return {
+    id:      r.id,
+    src:     'berg',
+    title:   title,
+    photo:   r.p || r.photo || null,
+    time:    r.tm || r.time || 0,
+    ings:    ings,
+    steps:   r.st || r.steps || [],
+    seasons: detectSeasons(title, ings),
+    style:   detectStyle(title, ings),
+    url:     `https://dashboard.bergamot.app/recipes/${r.id}`,
+  };
+}
+
+// Fallback appel direct (sans proxy)
+async function loadBergamotDirect(){
+  setLoad('Chargement direct Bergamot (peut être lent)…', 15);
+  const ctrl = new AbortController();
+  const tmo  = setTimeout(()=>ctrl.abort(), 90000);
+  let res;
+  try {
+    res = await fetch(`${BERG_API}/recipes/`,{headers:{'Authorization':`Bearer ${st.token}`},signal:ctrl.signal});
   } finally { clearTimeout(tmo); }
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
-
-  setLoad('Réception des recettes… (8 Mo, merci de patienter)', 30);
+  setLoad('Réception…', 35);
   const all = await res.json();
-
-  setLoad('Traitement des recettes…', 60);
-
-  const processed = all
-    .filter(r => {
-      const cats  = r.categories||[];
-      const ings  = r.ingredients?.[0]?.data||[];
-      const steps = r.instructions?.[0]?.data||[];
-      return cats.includes(8603) && ings.length >= 2 && steps.length >= 1;
-    })
-    .map(r => {
-      const ings = r.ingredients[0].data;
-      return {
-        id:      r.id,
-        src:     'berg',
-        title:   r.title.trim().slice(0,65),
-        photo:   r.photos?.[0]?.photoThumbUrl||null,
-        time:    r.time?.totalTime||0,
-        ings:    ings.slice(0,10),
-        steps:   (r.instructions?.[0]?.data||[]).slice(0,6),
-        seasons: detectSeasons(r.title, ings),
-        style:   detectStyle(r.title, ings),
-        url:     `https://dashboard.bergamot.app/recipes/${r.id}`,
-      };
-    });
-
-  // Sauvegarder en cache
-  setLoad('Mise en cache…', 85);
-  try {
-    localStorage.setItem(CACHE_KEY,  JSON.stringify(processed));
-    localStorage.setItem(CACHE_META, JSON.stringify({ts: Date.now(), token: st.token, count: processed.length}));
-    console.log(`[Bergamot] Cache sauvegardé: ${processed.length} recettes`);
-  } catch(e){ console.warn('Cache écriture:', e); }
-
-  return processed;
+  setLoad('Filtrage…', 60);
+  return all.filter(r=>{
+    const cats=r.categories||[]; const ings=r.ingredients?.[0]?.data||[]; const steps=r.instructions?.[0]?.data||[];
+    return cats.includes(8603)&&ings.length>=2&&steps.length>=1;
+  }).map(r=>{ const ings=r.ingredients[0].data;
+    return {id:r.id,src:'berg',title:r.title.trim().slice(0,65),photo:r.photos?.[0]?.photoThumbUrl||null,
+      time:r.time?.totalTime||0,ings:ings.slice(0,10),steps:(r.instructions?.[0]?.data||[]).slice(0,5),
+      seasons:detectSeasons(r.title,ings),style:detectStyle(r.title,ings),
+      url:`https://dashboard.bergamot.app/recipes/${r.id}`};
+  });
 }
 
 async function clearBergamotCache(){
-  localStorage.removeItem('bergRecipes_v3');
-  localStorage.removeItem('bergRecipesMeta_v3');
+  ['bergR_v5','bergM_v5','bergR_v4','bergM_v4','bergR_v3','bergM_v3',
+   'bergRecipes_v3','bergRecipesMeta_v3'].forEach(k=>localStorage.removeItem(k));
 }
+
 
 async function loadExternalSite(site){
   if(site.type==='wordpress'){
