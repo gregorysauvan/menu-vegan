@@ -331,9 +331,9 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 
 /* Boutons vue dans header */
 .view-btns{display:flex;border-radius:7px;overflow:hidden;border:1px solid rgba(255,255,255,.3);}
-.view-btn{background:rgba(255,255,255,.12);color:#fff;border:none;padding:5px 10px;font-size:.75rem;cursor:pointer;font-family:inherit;touch-action:manipulation;transition:background .15s;white-space:nowrap;}
-.view-btn:hover{background:rgba(255,255,255,.25);}
-.view-btn.active{background:#4a6e50;}
+.view-btn{background:rgba(255,255,255,.12);color:#fff;border:none;padding:6px 11px;font-size:.75rem;cursor:pointer;font-family:inherit;touch-action:manipulation;transition:background .15s;white-space:nowrap;-webkit-tap-highlight-color:rgba(0,0,0,0);user-select:none;-webkit-user-select:none;}
+.view-btn:hover,.view-btn:active{background:rgba(255,255,255,.3);}
+.view-btn.active{background:#4a6e50 !important;}
 @media(max-width:640px){
   .view-btn span{display:none;}
   .view-btn{padding:5px 8px;font-size:.85rem;}
@@ -974,24 +974,24 @@ async function detectSiteCompat(url){
       const total = parseInt(r.headers.get('X-WP-Total')||'0');
       const data  = await r.json();
       if(Array.isArray(data) && data.length > 0){
-        // Vérifier qu'une page a bien du JSON-LD Recipe
-        const link = data[0]?.link;
-        if(link){
-          const pr = await pGet(link);
-          if(pr.ok){
+        // Tester jusqu'à 5 articles pour trouver au moins 1 JSON-LD Recipe
+        const testLinks = data.slice(0, 5).map(p => p.link).filter(Boolean);
+        let foundRecipe = false;
+        for(const link of testLinks){
+          try {
+            const pr = await pGet(link);
+            if(!pr.ok) continue;
             const pageHtml = await pr.text();
-            const hasRecipe = /"@type"\s*:\s*"Recipe"/.test(pageHtml);
-            if(hasRecipe){
-              const name = new URL(base).hostname.replace('www.','');
-              return {compatible:true, type:'wordpress-html', name, count:total||data.length,
-                detail:`WordPress · ${total||'?'} articles · recettes JSON-LD détectées`};
-            }
-          }
+            if(/"@type"\s*:\s*"Recipe"/.test(pageHtml)){ foundRecipe = true; break; }
+          } catch(e){}
         }
-        // WP dispo mais pas de JSON-LD Recipe détecté sur le premier article
         const name = new URL(base).hostname.replace('www.','');
+        if(foundRecipe){
+          return {compatible:true, type:'wordpress-html', name, count:total||data.length,
+            detail:`WordPress · ${total||'?'} articles · recettes JSON-LD détectées`};
+        }
         return {compatible:false,
-          detail:`WordPress accessible mais aucune fiche recette structurée (JSON-LD) trouvée sur ce site`};
+          detail:`WordPress accessible mais ce site ne publie pas de fiches recettes structurées (pas de JSON-LD Recipe trouvé sur les ${testLinks.length} derniers articles)`};
       }
     }
   } catch(e){ console.warn('WP API:', e); }
@@ -1005,25 +1005,26 @@ async function detectSiteCompat(url){
         if(text.includes('<rss') || text.includes('<feed')){
           // Trouver un lien article et vérifier le JSON-LD
           const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)].map(m=>m[1]);
-          const articleLink = links.find(l=>l!==base && l!==base+'/');
-          if(articleLink){
-            const pr = await pGet(articleLink);
-            if(pr.ok){
+          const articleLinks = links.filter(l=>l!==base && l!==base+'/').slice(0,5);
+          let foundRecipe = false;
+          for(const articleLink of articleLinks){
+            try {
+              const pr = await pGet(articleLink);
+              if(!pr.ok) continue;
               const pageHtml = await pr.text();
-              const hasRecipe = /"@type"\s*:\s*"Recipe"/.test(pageHtml);
-              const isBlogger = feed.includes('feeds');
-              const type = isBlogger ? 'blogger-html' : 'wordpress-html';
-              const name = new URL(base).hostname.replace('www.','');
-              // Compter les liens
-              const count = links.filter(l=>l!==base&&l!==base+'/').length;
-              if(hasRecipe)
-                return {compatible:true, type, name, count,
-                  detail:`${isBlogger?'Blogger':'WordPress'} · recettes JSON-LD détectées`};
-              else
-                return {compatible:false,
-                  detail:`${isBlogger?'Blogger':'WordPress'} accessible mais pas de fiches recettes structurées`};
-            }
+              if(/"@type"\s*:\s*"Recipe"/.test(pageHtml)){ foundRecipe = true; break; }
+            } catch(e){}
           }
+          const isBlogger = feed.includes('feeds');
+          const type = isBlogger ? 'blogger-html' : 'wordpress-html';
+          const name = new URL(base).hostname.replace('www.','');
+          const count = articleLinks.length;
+          if(foundRecipe)
+            return {compatible:true, type, name, count,
+              detail:`${isBlogger?'Blogger':'WordPress'} · recettes JSON-LD détectées`};
+          else
+            return {compatible:false,
+              detail:`${isBlogger?'Blogger':'WordPress'} accessible mais pas de fiches recettes structurées (testé ${articleLinks.length} articles)`};
         }
       }
     } catch(e){ console.warn('RSS:', e); }
@@ -1063,8 +1064,32 @@ async function startLoading(){
   }
   for(const site of st.sites){
     try {
-      setLoad(`Chargement ${site.name||site.url}…`, 88);
-      extra = extra.concat(await loadExternalSite(site));
+      // Cache par site — clé basée sur l'URL
+      const ck = 'extR_' + btoa(site.url).replace(/[^a-z0-9]/gi,'').slice(0,20);
+      const cm = 'extM_' + btoa(site.url).replace(/[^a-z0-9]/gi,'').slice(0,20);
+      let siteRecipes = null;
+      try {
+        const meta = JSON.parse(localStorage.getItem(cm)||'{}');
+        if(Date.now() - (meta.ts||0) < 7200000){ // 2h
+          const cached = JSON.parse(localStorage.getItem(ck)||'null');
+          if(cached && cached.length > 0){
+            siteRecipes = cached;
+            setLoad(`${site.name||site.url} depuis le cache…`, 88);
+            console.log(`[Cache ext] ${site.name}: ${cached.length} recettes`);
+          }
+        }
+      } catch(e){}
+
+      if(!siteRecipes){
+        setLoad(`Chargement ${site.name||site.url}…`, 88);
+        siteRecipes = await loadExternalSite(site);
+        try {
+          localStorage.setItem(ck, JSON.stringify(siteRecipes));
+          localStorage.setItem(cm, JSON.stringify({ts: Date.now()}));
+        } catch(e){ console.warn('ExtCache write:', e); }
+      }
+
+      extra = extra.concat(siteRecipes);
     } catch(e){ console.warn('Site ext:', e); }
   }
 
@@ -1073,7 +1098,10 @@ async function startLoading(){
 
   const parts=[];
   if(berg.length) parts.push(`${berg.length.toLocaleString('fr')} Bergamot`);
-  if(extra.length) parts.push(`${extra.length} sites perso`);
+  if(extra.length){
+    const ns = st.sites.length;
+    parts.push(`${extra.length.toLocaleString('fr')} recette${extra.length>1?'s':''} externe${ns>1?'s':''} (${ns} site${ns>1?'s':''})`);
+  }
   setEl('headerSub','textContent', parts.join(' · ') || 'Aucune source connectée');
   setEl('hcount','textContent', `🌿 ${st.allRecipes.length.toLocaleString('fr')} recettes`);
 
@@ -1254,7 +1282,7 @@ async function loadExternalSite(site){
   const srcTag  = site.name || new URL(site.url).hostname.replace('www.','');
   const results = [];
 
-  if(site.type === 'wordpress-html'){
+  if(site.type === 'wordpress-html' || site.type === 'wordpress'){
     // 1. Récupérer la liste des articles via WP REST API (proxy)
     const PER_PAGE = 50;
     let page = 1, totalPages = 1;
@@ -1288,7 +1316,7 @@ async function loadExternalSite(site){
     return results;
   }
 
-  if(site.type === 'blogger-html'){
+  if(site.type === 'blogger-html' || site.type === 'blogger'){
     // 1. Récupérer les liens via RSS
     const allLinks = [];
     for(let start=1; start<=201; start+=25){
@@ -1355,6 +1383,8 @@ async function saveAndReload(){ saveCfg(); closeSettings(); st.allRecipes=[]; st
 async function forceRefresh(){
   if(!confirm('Recharger toutes les recettes depuis Bergamot ?\n(peut prendre ~30 secondes)')) return;
   await clearBergamotCache();
+  // Vider aussi le cache des sites externes
+  Object.keys(localStorage).filter(k=>k.startsWith('extR_')||k.startsWith('extM_')).forEach(k=>localStorage.removeItem(k));
   window._forceReload = true;  // bypass cache même si TTL pas expiré
   st.allRecipes=[]; st.menu=[];
   const ap = document.getElementById('app');
@@ -1594,31 +1624,42 @@ function renderAgenda(g){
   const MOMENT_ORDER2 = ['petitdej','dejeuner','gouter','diner'];
   const moments = MOMENT_ORDER2.filter(m => st.mealTypes.has(m));
 
+  // Toujours 2 colonnes max — si >2 moments, on fait 2 lignes de 2
+  const COLS = 2;
+
   st.menu.forEach((day, di)=>{
     const card = document.createElement('div');
     card.style.cssText = 'background:var(--white);border:1px solid var(--warm);border-radius:10px;overflow:hidden';
 
-    // Header jour
     let h = `<div style="background:#4a6e50;color:#fff;padding:6px 12px;font-size:12px;font-weight:500">${day.name}</div>`;
 
-    // Si 1 seul moment → pas de grid, affichage direct
-    // Si plusieurs moments → grid
-    const cols = moments.length > 1 ? moments.map(()=>'1fr').join(' ') : '1fr';
-    h += `<div style="display:grid;grid-template-columns:${cols}">`;
-
-    for(const mt of moments){
-      const mtLabel = MOMENT_LABELS[mt] || mt;
+    if(moments.length === 1){
+      // 1 seul moment → pleine largeur
+      const mt = moments[0];
       const svcs = getMtServices(mt);
-      const borderRight = moments.indexOf(mt) < moments.length-1
-        ? 'border-right:1px solid var(--warm);' : '';
-      h += `<div style="padding:8px 10px;${borderRight}">`;
-      h += `<div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:6px">${mtLabel}</div>`;
-      for(const svc of svcs){
-        h += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
-      }
+      h += `<div style="padding:8px 12px">`;
+      h += `<div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:6px">${MOMENT_LABELS[mt]||mt}</div>`;
+      for(const svc of svcs) h += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
+      h += `</div>`;
+    } else {
+      // 2+ moments → grille 2 colonnes, wrap automatique
+      h += `<div style="display:grid;grid-template-columns:1fr 1fr">`;
+      moments.forEach((mt, idx)=>{
+        const svcs = getMtServices(mt);
+        const col = idx % COLS;
+        const row = Math.floor(idx / COLS);
+        // Bordure droite sauf dernière colonne
+        const borderR = col < COLS-1 ? 'border-right:1px solid var(--warm);' : '';
+        // Bordure haute pour les lignes > 0
+        const borderT = row > 0 ? 'border-top:1px solid var(--warm);' : '';
+        h += `<div style="padding:8px 10px;${borderR}${borderT}">`;
+        h += `<div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:5px">${MOMENT_LABELS[mt]||mt}</div>`;
+        for(const svc of svcs) h += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
+        h += `</div>`;
+      });
       h += `</div>`;
     }
-    h += `</div>`;
+
     card.innerHTML = h;
     g.appendChild(card);
   });
@@ -1815,8 +1856,14 @@ function setView(mode){
   st.viewMode = mode;
   const btnA = document.getElementById('btnViewA');
   const btnB = document.getElementById('btnViewB');
-  if(btnA){ btnA.style.background = mode==='agenda'  ? '#4a6e50':'rgba(255,255,255,.15)'; btnA.style.fontWeight = mode==='agenda'?'600':'400'; }
-  if(btnB){ btnB.style.background = mode==='columns' ? '#4a6e50':'rgba(255,255,255,.15)'; btnB.style.fontWeight = mode==='columns'?'600':'400'; }
+  if(btnA){ 
+    btnA.classList.toggle('active', mode==='agenda');
+    btnA.style.background = mode==='agenda' ? '#4a6e50' : 'rgba(255,255,255,.12)';
+  }
+  if(btnB){ 
+    btnB.classList.toggle('active', mode==='columns');
+    btnB.style.background = mode==='columns' ? '#4a6e50' : 'rgba(255,255,255,.12)';
+  }
   if(st.menu.length) renderMenus();
 }
 function toggleView(){
