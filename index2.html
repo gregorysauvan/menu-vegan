@@ -303,6 +303,20 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .tgl-btn{padding:4px 10px;border-radius:16px;font-size:.74rem;font-weight:500;cursor:pointer;border:1.5px solid var(--warm);background:var(--cream);color:var(--muted);font-family:inherit;touch-action:manipulation;user-select:none;-webkit-user-select:none;transition:all .15s;}
 .tgl-btn.active{background:var(--sage-dark);color:#fff;border-color:var(--sage-dark);}
 .tgl-btn:hover{border-color:var(--sage);}
+
+/* Sections collapsibles */
+.sidebar-section-title{cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none;-webkit-user-select:none;}
+.sidebar-section-title .chevron{font-size:.7rem;color:var(--muted);transition:transform .2s;display:inline-block;}
+.sidebar-section-title.collapsed .chevron{transform:rotate(-90deg);}
+.section-body{overflow:hidden;transition:max-height .25s ease;max-height:600px;}
+.section-body.collapsed{max-height:0;}
+
+/* Vue colonnes : wrap sur plusieurs lignes */
+#grid.view-columns{display:flex!important;flex-wrap:wrap;gap:10px;align-items:flex-start;}
+#grid.view-columns > div{flex:1 1 160px;min-width:140px;max-width:220px;}
+@media(max-width:640px){
+  #grid.view-columns > div{flex:1 1 140px;}
+}
 </style>
 </head>
 <body>
@@ -383,16 +397,19 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 
       <!-- Type de plat -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title">🍽️ Type de plat</div>
+        <div class="sidebar-section-title" onclick="toggleSection(this)">🍽️ Type de plat <span class="chevron">▾</span></div>
+        <div class="section-body">
         <div class="cat-list" id="catList">
           <!-- Généré dynamiquement après chargement -->
           <div style="font-size:.71rem;color:var(--muted)">Chargement…</div>
         </div>
-      </div>
+        </div><!-- /section-body -->
+      </div><!-- /sidebar-section -->
 
       <!-- Régimes -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title">🥗 Régime alimentaire</div>
+        <div class="sidebar-section-title" onclick="toggleSection(this)">🥗 Régime alimentaire <span class="chevron">▾</span></div>
+        <div class="section-body">
         <div class="diet-list">
           <div class="diet-item diet-vegan" data-diet="vegan" onclick="toggleDiet('vegan')">
             <span class="diet-icon">🌿</span>
@@ -413,11 +430,13 @@ header h1 span{color:var(--sage-light);font-style:italic;}
             
           </div>
         </div>
-      </div>
+        </div><!-- /section-body -->
+      </div><!-- /sidebar-section -->
 
       <!-- Saison -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title">📅 Saison</div>
+        <div class="sidebar-section-title" onclick="toggleSection(this)">📅 Saison <span class="chevron">▾</span></div>
+        <div class="section-body">
         <div class="season-list">
           <div class="season-item s-all sel" data-s="all"    onclick="setSeason('all')">   <span>🍽️</span> <span>Toutes saisons</span> </div>
           <div class="season-item s-p"       data-s="spring" onclick="setSeason('spring')"><span>🌸</span> <span>Printemps</span>      </div>
@@ -429,11 +448,13 @@ header h1 span{color:var(--sage-light);font-style:italic;}
           <div class="tgl-dot" id="strictDot"></div>
           <span>Strictement de saison</span>
         </div>
-      </div>
+        </div><!-- /section-body -->
+      </div><!-- /sidebar-section -->
 
       <!-- Repas -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title">🍽️ Repas</div>
+        <div class="sidebar-section-title" onclick="toggleSection(this)">🍽️ Repas <span class="chevron">▾</span></div>
+        <div class="section-body">
         <div class="repas-row" style="margin-bottom:10px">
           <span class="repas-label">Nombre par semaine</span>
           <div class="repas-stepper">
@@ -445,7 +466,9 @@ header h1 span{color:var(--sage-light);font-style:italic;}
         <input type="hidden" id="mealCount" value="6">
         <div class="sidebar-section-title" style="margin-bottom:6px">Moment du repas</div>
         <div class="toggle-group" id="mealTypeGroup">
+          <button class="tgl-btn" data-mt="petitdej" onclick="toggleMealType('petitdej')">🌅 Petit-déj</button>
           <button class="tgl-btn active" data-mt="dejeuner" onclick="toggleMealType('dejeuner')">🌞 Déjeuner</button>
+          <button class="tgl-btn" data-mt="gouter"   onclick="toggleMealType('gouter')">🌤️ Goûter</button>
           <button class="tgl-btn active" data-mt="diner"    onclick="toggleMealType('diner')">🌙 Dîner</button>
         </div>
         <div class="sidebar-section-title" style="margin-top:10px;margin-bottom:6px">Type de recette</div>
@@ -454,16 +477,19 @@ header h1 span{color:var(--sage-light);font-style:italic;}
           <button class="tgl-btn active" data-ct="plat"    onclick="toggleCourseType('plat')">🍲 Plat</button>
           <button class="tgl-btn active" data-ct="dessert" onclick="toggleCourseType('dessert')">🍰 Dessert</button>
         </div>
-      </div>
+        </div><!-- /section-body -->
+      </div><!-- /sidebar-section -->
 
       <!-- Protéine -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title">💪 Option</div>
+        <div class="sidebar-section-title" onclick="toggleSection(this)">💪 Option <span class="chevron">▾</span></div>
+        <div class="section-body">
         <div class="prot-row" id="protRow" onclick="toggleProt()">
           <span class="prot-row-icon">💪</span>
           <span class="prot-row-label">Protéine à chaque repas</span>
         </div>
-      </div>
+        </div><!-- /section-body -->
+      </div><!-- /sidebar-section -->
 
       <!-- Pool info -->
       <div class="sidebar-section">
@@ -625,11 +651,15 @@ const BERG_CATS = {
 
 
 const COURSE_TYPE_MAP = {
-  entree:  [8602, 15947, 8610, 31409],
-  plat:    [8603, 16929, 15982, 35459, 35460],
-  dessert: [8604, 8606, 8608],
+  entree:  [8602, 15947, 8610, 31409],            // Entrée, Salade, Apéritif, Sandwich
+  plat:    [8603, 16929, 15982, 35459, 35460],     // Plat principal, Tarte, Soupe, Simili, Boulettes
+  dessert: [8604, 8606, 8608],                     // Dessert, Cake, Goûter
+  // catégories exclues des menus : 12689=Sauce, 13569=Fromage, 29062=Lait végétal,
+  // 34519=Crémerie, 55286=Tartinade, 55447=Boisson, 79337=Crème chocolat
 };
+const EXCLUDED_CATS = [12689, 13569, 29062, 34519, 55286, 55447, 79337];
 const COURSE_LABELS = {entree:'Entrée', plat:'Plat', dessert:'Dessert'};
+const MOMENT_LABELS = {petitdej:'🌅 Petit-déj', dejeuner:'🌞 Déjeuner', gouter:'🌤️ Goûter', diner:'🌙 Dîner'};
 const COURSE_COLORS = {entree:'#e8f5e9|#2e7d32', plat:'#e3f2fd|#1565c0', dessert:'#fce4ec|#880e4f'};
 const DAY_NAMES = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche','Lundi +','Mardi +'];
 
@@ -683,7 +713,7 @@ const st = {
   prot: false, courses: false,
   diets: new Set(),  // filtres actifs : 'vegan','vege','sporc','sgluten'
   catFilter: new Set(),  // filtre type de plat : Set de cat IDs Bergamot
-  mealTypes: new Set(['dejeuner','diner']),
+  mealTypes: new Set(['dejeuner','diner']),  // petit-dej, dejeuner, gouter, diner disponibles
   courseTypes: new Set(['entree','plat','dessert']),
   viewMode: 'agenda',  // 'agenda' ou 'columns'
   token: null,
@@ -730,6 +760,9 @@ function setLoad(txt,pct){ setEl('loadTxt','textContent',txt); const _lb=documen
    FILTRES ALIMENTAIRES
    ============================================================ */
 function passesFilter(r){
+  // Exclure les catégories non-repas (sauces, fromages, boissons...)
+  if((r.cats||[]).every(c => EXCLUDED_CATS.includes(c)) && (r.cats||[]).length > 0) return false;
+
   // Filtre type de plat (sidebar cat-item)
   if(st.catFilter.size){
     const rcats = r.cats || [];
@@ -950,6 +983,16 @@ async function startLoading(){
 
   // Construire la liste des types de plat avec leurs comptages réels
   buildCatList();
+  // Défaut : tous les types de plat sélectionnés dans la catList
+  setTimeout(()=>{
+    document.querySelectorAll('.cat-item').forEach(el=>{
+      el.classList.add('active');
+      const c = parseInt(el.getAttribute('data-cat'));
+      st.catFilter.delete(c); // vide = tous
+    });
+    // Régime : aucun par défaut (st.diets est déjà vide)
+    // Saison : auto-détectée dans setSeason(autoSeason())
+  }, 100);
 
   if(st.allRecipes.length===0){
     document.getElementById('grid').innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">Aucune recette. <span style="text-decoration:underline;cursor:pointer" onclick="openSettings()">Vérifiez la configuration ⚙️</span></div>`;
@@ -1356,7 +1399,7 @@ function recipeRow(r, dayIdx, moment, svc){
 }
 
 function renderAgenda(g){
-  // 1 ligne par jour, chaque ligne = déjeuner + dîner côte à côte
+  g.className = 'grid';
   g.style.display = 'flex';
   g.style.flexDirection = 'column';
   g.style.gap = '10px';
@@ -1387,32 +1430,29 @@ function renderAgenda(g){
 }
 
 function renderColumns(g){
-  // 1 colonne par jour
   const moments  = [...st.mealTypes];
   const services = [...st.courseTypes];
-  const N = st.menu.length;
-  const w = window.innerWidth;
-  const cols = w<=480 ? Math.min(N,2) : w<=700 ? Math.min(N,3) : Math.min(N,7);
 
-  g.style.display = 'grid';
-  g.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+  g.className = 'grid view-columns';
+  g.style.display = '';  // géré par CSS
+  g.style.gridTemplateColumns = '';
 
   st.menu.forEach((day, di)=>{
     const card = document.createElement('div');
-    card.style.cssText = 'background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;display:flex;flex-direction:column';
+    card.style.cssText = 'background:var(--white);border:1px solid var(--warm);border-radius:10px;overflow:hidden;display:flex;flex-direction:column';
 
-    let html = `<div style="background:#4a6e50;color:#fff;padding:5px 9px;font-size:11px;font-weight:500;text-align:center">${day.name}</div>`;
+    let h = `<div style="background:#4a6e50;color:#fff;padding:6px 10px;font-size:11px;font-weight:500;text-align:center">${day.name}</div>`;
 
     for(const mt of moments){
-      const mtLabel = mt==='dejeuner'?'🌞 Déj':'🌙 Dîner';
-      html += `<div style="padding:7px 9px;border-bottom:0.5px solid var(--color-border-tertiary)">`;
-      html += `<div style="font-size:10px;font-weight:500;color:var(--color-text-secondary);margin-bottom:5px">${mtLabel}</div>`;
+      const mtLabel = MOMENT_LABELS[mt]||mt;
+      h += `<div style="padding:8px 10px;border-bottom:0.5px solid var(--warm)">`;
+      h += `<div style="font-size:10px;font-weight:500;color:var(--muted);margin-bottom:6px">${mtLabel}</div>`;
       for(const svc of services){
-        html += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
+        h += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
       }
-      html += `</div>`;
+      h += `</div>`;
     }
-    card.innerHTML = html;
+    card.innerHTML = h;
     g.appendChild(card);
   });
 }
@@ -1521,6 +1561,15 @@ function getMealLabel(i){
   return MEALS[i];
 }
 
+
+
+function toggleSection(titleEl){
+  titleEl.classList.toggle('collapsed');
+  const body = titleEl.nextElementSibling;
+  if(body && body.classList.contains('section-body')){
+    body.classList.toggle('collapsed');
+  }
+}
 
 function setView(mode){
   st.viewMode = mode;
