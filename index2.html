@@ -327,6 +327,10 @@ header h1 span{color:var(--sage-light);font-style:italic;}
   </div>
   <div class="header-right">
     <span id="hcount"></span>
+    <div style="display:flex;gap:4px">
+      <button id="btnViewA" onclick="setView('agenda')"  style="background:#4a6e50;color:#fff;border:none;border-radius:6px 0 0 6px;padding:5px 9px;font-size:.75rem;cursor:pointer;font-family:inherit;touch-action:manipulation" title="Vue agenda">☰ Agenda</button>
+      <button id="btnViewB" onclick="setView('columns')" style="background:none;border:1px solid rgba(255,255,255,.3);border-radius:0 6px 6px 0;padding:5px 9px;font-size:.75rem;cursor:pointer;color:#fff;font-family:inherit;touch-action:manipulation" title="Vue colonnes">⊞ Colonnes</button>
+    </div>
     <button class="btn-settings" id="btnRefresh" onclick="forceRefresh()" style="display:none;font-size:.75rem;padding:4px 8px;opacity:.7" title="Forcer la mise à jour des recettes">↺</button>
     <button class="btn-settings" id="btnSettings" onclick="openSettings()" style="display:none">⚙️ Config</button>
   </div>
@@ -620,12 +624,14 @@ const BERG_CATS = {
 // st.catFilter est ajouté à l'état
 
 
-/* Mapping catégories Bergamot → type de recette */
 const COURSE_TYPE_MAP = {
-  entree:  [8602, 15947, 8610, 31409],          // Entrée, Salade, Apéritif, Sandwich
-  plat:    [8603, 16929, 15982, 35459, 35460],   // Plat principal, Tarte/quiche, Soupe, Simili carne, Boulettes
-  dessert: [8604, 8606, 8608],                   // Dessert, Cake, Goûter
+  entree:  [8602, 15947, 8610, 31409],
+  plat:    [8603, 16929, 15982, 35459, 35460],
+  dessert: [8604, 8606, 8608],
 };
+const COURSE_LABELS = {entree:'Entrée', plat:'Plat', dessert:'Dessert'};
+const COURSE_COLORS = {entree:'#e8f5e9|#2e7d32', plat:'#e3f2fd|#1565c0', dessert:'#fce4ec|#880e4f'};
+const DAY_NAMES = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche','Lundi +','Mardi +'];
 
 const SEASON_VEG = {
   p:['asperge','poireau','petits pois','épinard','fève','radis','artichaut','cresson','navet','blette','brocoli'],
@@ -677,8 +683,9 @@ const st = {
   prot: false, courses: false,
   diets: new Set(),  // filtres actifs : 'vegan','vege','sporc','sgluten'
   catFilter: new Set(),  // filtre type de plat : Set de cat IDs Bergamot
-  mealTypes: new Set(['dejeuner','diner']),    // moment : déjeuner et/ou dîner
-  courseTypes: new Set(['entree','plat','dessert']),  // type : entrée/plat/dessert
+  mealTypes: new Set(['dejeuner','diner']),
+  courseTypes: new Set(['entree','plat','dessert']),
+  viewMode: 'agenda',  // 'agenda' ou 'columns'
   token: null,
   sites: [],
 };
@@ -954,17 +961,20 @@ async function startLoading(){
 async function loadBergamot(){
   const CK = 'bergR_v5', CM = 'bergM_v5', TTL = 30*60*1000;
 
-  // ── Lire le cache ──────────────────────────────────────────
-  try {
-    const m = JSON.parse(localStorage.getItem(CM)||'{}');
-    if(Date.now()-(m.ts||0) < TTL && m.tok === st.token.slice(-8)){
-      const c = JSON.parse(localStorage.getItem(CK)||'null');
-      if(c && c.length > 0){
-        setLoad(`Cache : ${c.length} recettes`, 70);
-        return c.map(r => toRecipe(r));
+  // ── Lire le cache (sauf si forceReload demandé) ───────────
+  if(!window._forceReload){
+    try {
+      const m = JSON.parse(localStorage.getItem(CM)||'{}');
+      if(Date.now()-(m.ts||0) < TTL && m.tok === st.token.slice(-8)){
+        const c = JSON.parse(localStorage.getItem(CK)||'null');
+        if(c && c.length > 0){
+          setLoad(`Cache : ${c.length} recettes`, 70);
+          return c.map(r => toRecipe(r));
+        }
       }
-    }
-  } catch(e){}
+    } catch(e){}
+  }
+  window._forceReload = false;
 
   // ── Appeler le proxy Netlify Function ─────────────────────
   // Le proxy filtre et allège le JSON côté serveur : ~500Ko au lieu de 8Mo
@@ -1047,8 +1057,12 @@ async function loadBergamotDirect(){
 }
 
 async function clearBergamotCache(){
+  // Vider toutes les versions de cache connues
   ['bergR_v5','bergM_v5','bergR_v4','bergM_v4','bergR_v3','bergM_v3',
    'bergRecipes_v3','bergRecipesMeta_v3'].forEach(k=>localStorage.removeItem(k));
+  // Vider aussi toute clé qui ressemble à du cache berg
+  Object.keys(localStorage).filter(k=>k.startsWith('berg')).forEach(k=>localStorage.removeItem(k));
+  console.log('[Cache] Vidé');
 }
 
 
@@ -1133,9 +1147,12 @@ async function saveAndReload(){ saveCfg(); closeSettings(); st.allRecipes=[]; st
 async function forceRefresh(){
   if(!confirm('Recharger toutes les recettes depuis Bergamot ?\n(peut prendre ~30 secondes)')) return;
   await clearBergamotCache();
+  window._forceReload = true;  // bypass cache même si TTL pas expiré
   st.allRecipes=[]; st.menu=[];
-  document.getElementById('app').style.display='none';
-  document.getElementById('loadScreen').style.display='block';
+  const ap = document.getElementById('app');
+  const ls = document.getElementById('loadScreen');
+  if(ap) ap.style.display='none';
+  if(ls) ls.style.display='block';
   await startLoading();
 }
 
@@ -1238,27 +1255,69 @@ function vegOk(r,sel){ const allV=Object.values(SEASON_VEG).flat(); const used=n
 function shuffle(a){ const b=[...a]; for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];} return b; }
 
 function generate(){
-  if(!st.pool.length){ alert('Aucune recette ne correspond aux filtres sélectionnés.'); return; }
-  const N=parseInt(document.getElementById('mealCount').value)||6;
-  const pool=getPool();
-  if(!pool.length){ alert('Aucune recette ne correspond aux filtres saison + régime.'); return; }
-  const scored=shuffle(pool).map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
-  const sel=[];
-  for(const{r}of scored){if(sel.length>=N)break;if(styleOk(r,sel)&&vegOk(r,sel))sel.push(r);}
-  if(sel.length<N)for(const{r}of scored){if(sel.length>=N)break;if(!sel.includes(r)&&styleOk(r,sel))sel.push(r);}
-  if(sel.length<N)for(const{r}of scored){if(sel.length>=N)break;if(!sel.includes(r))sel.push(r);}
-  st.menu=sel; renderMenus(); if(st.courses)renderCourses();
+  if(!st.pool.length){ alert('Aucune recette ne correspond aux filtres.'); return; }
+  const N    = parseInt(document.getElementById('mealCount').value)||6;
+  const pool = getPool();
+  if(!pool.length){ alert('Aucune recette pour ces filtres.'); return; }
+
+  const moments  = [...st.mealTypes];    // ['dejeuner','diner'] ou sous-ensemble
+  const services = [...st.courseTypes];  // ['entree','plat','dessert'] ou sous-ensemble
+
+  // Construire un pool par service
+  const poolByCourse = {};
+  for(const svc of services){
+    const catIds = COURSE_TYPE_MAP[svc] || [];
+    // Recettes qui ont au moins une catégorie du service, OU aucune catégorie connue (plat par défaut)
+    const allKnownCats = Object.values(COURSE_TYPE_MAP).flat();
+    poolByCourse[svc] = pool.filter(r=>{
+      const rc = r.cats||[];
+      const hasCat = rc.some(c=>allKnownCats.includes(c));
+      return !hasCat || rc.some(c=>catIds.includes(c));
+    });
+    if(!poolByCourse[svc].length) poolByCourse[svc] = pool; // fallback
+  }
+
+  // Générer : jours × moments × services
+  const days = [];
+  for(let d=0; d<N; d++){
+    const dayObj = {name: DAY_NAMES[d]||`Jour ${d+1}`, meals:{}};
+    for(const mt of moments){
+      dayObj.meals[mt] = {};
+      for(const svc of services){
+        const p = poolByCourse[svc];
+        // Anti-doublon global dans le service
+        const alreadyUsed = days.flatMap(day=>
+          Object.values(day.meals).flatMap(meal=> meal[svc]?[meal[svc].id]:[])
+        );
+        const avail = shuffle(p.filter(r=>!alreadyUsed.includes(r.id)));
+        const scored = avail.map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
+        dayObj.meals[mt][svc] = scored[0]?.r || p[Math.floor(Math.random()*p.length)];
+      }
+    }
+    days.push(dayObj);
+  }
+
+  st.menu = days;
+  renderMenus();
+  if(st.courses) renderCourses();
 }
 
-function swapMeal(idx){
-  const cur=st.menu[idx],others=st.menu.filter((_,i)=>i!==idx);
-  const pool=getPool().filter(r=>r.id!==cur.id&&!others.some(o=>o.id===r.id));
-  const compat=shuffle(pool.filter(r=>styleOk(r,others)));
-  const cands=compat.length?compat:shuffle(pool);
-  const scored=cands.map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
-  const topN=Math.max(1,Math.ceil(scored.length*.3));
-  st.menu[idx]=scored.slice(0,topN)[Math.floor(Math.random()*topN)].r;
-  renderMenus(); if(st.courses)renderCourses();
+function swapItem(dayIdx, moment, svc){
+  const cur = st.menu[dayIdx]?.meals[moment]?.[svc];
+  if(!cur) return;
+  const allKnownCats = Object.values(COURSE_TYPE_MAP).flat();
+  const catIds = COURSE_TYPE_MAP[svc]||[];
+  const pool = getPool().filter(r=>{
+    if(r.id === cur.id) return false;
+    const rc=r.cats||[];
+    const hasCat=rc.some(c=>allKnownCats.includes(c));
+    return !hasCat||rc.some(c=>catIds.includes(c));
+  });
+  const scored = shuffle(pool).map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
+  const topN = Math.max(1,Math.ceil(scored.length*.3));
+  st.menu[dayIdx].meals[moment][svc] = scored.slice(0,topN)[Math.floor(Math.random()*topN)].r;
+  renderMenus();
+  if(st.courses) renderCourses();
 }
 
 /* ============================================================
@@ -1270,59 +1329,115 @@ function seasonBadges(r){
 }
 
 function renderMenus(){
-  const N=parseInt(document.getElementById('mealCount').value)||6;
-  const g=document.getElementById('grid');
-  if(!g) return;
-  const w=window.innerWidth;
-  let cols;
-  if(w<=480)      cols=Math.min(N,2);
-  else if(w<=700) cols=Math.min(N,2);
-  else if(w<=1000)cols=Math.min(N,3);
-  else            cols=N<=6?3:N<=8?4:5;
-  g.style.gridTemplateColumns=`repeat(${cols},1fr)`;
-  g.innerHTML='';
-  st.menu.forEach((r,i)=>{
-    const sc=ideaScore(r),isSeason=st.season!=='all'&&(!r.seasons||r.seasons.includes(SC[st.season]));
-    const isBerg=r.src==='berg';
-    const d=document.createElement('div'); d.className='card';
-    d.innerHTML=`
-      <div class="card-day">${DAYS[i]}<span class="meal-pill">${MEALS[i]}</span></div>
-      ${r.photo?`<img class="card-img" src="${r.photo}" alt="" loading="lazy" onerror="this.style.display='none'">`:`<div class="card-nophoto">🍽️</div>`}
-      <div class="card-body">
-        <div class="card-title" onclick="openModal(${i})">${r.title}</div>
-        <div class="card-ings">${r.ings.slice(0,4).join(' · ')}${r.ings.length>4?'…':''}</div>
-        <div class="card-seasons">${seasonBadges(r)}${!isBerg?`<span class="bdg" style="background:#f5f0ff;color:#5e35b1;font-size:.57rem">${r.src}</span>`:''}</div>
-        <div class="card-foot">
-          ${r.time?`<span class="bdg bdg-t">⏱${r.time}m</span>`:''}
-          ${sc>0?'<span class="bdg bdg-m">✨</span>':''}
-          ${isSeason?'<span class="bdg bdg-s">✓</span>':''}
-          ${stockScore(r)>0?'<span class="bdg bdg-stk">🧺</span>':''}
-          ${hasProtein(r)?'<span class="bdg bdg-prot">💪</span>':''}
-          <button class="btn-swap" onclick="event.stopPropagation();swapMeal(${i})">↻</button>
-        </div>
-        ${st.prot&&!hasProtein(r)?`<div class="prot-tip">${protTip(r)}</div>`:''}
-      </div>`;
-    g.appendChild(d);
+  const g = document.getElementById('grid');
+  if(!g || !st.menu.length) return;
+  g.innerHTML = '';
+  g.style.gridTemplateColumns = '';  // reset
+
+  if(st.viewMode === 'agenda'){
+    renderAgenda(g);
+  } else {
+    renderColumns(g);
+  }
+}
+
+function courseTag(svc){
+  const [bg,color] = (COURSE_COLORS[svc]||'var(--color-background-secondary)|var(--color-text-secondary)').split('|');
+  return `<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:${bg};color:${color};flex-shrink:0">${COURSE_LABELS[svc]||svc}</span>`;
+}
+
+function recipeRow(r, dayIdx, moment, svc){
+  if(!r) return `<div style="font-size:11px;color:var(--color-text-secondary);padding:4px 0">—</div>`;
+  return `<div style="display:flex;align-items:flex-start;gap:5px;padding:4px 0;border-bottom:0.5px dashed var(--color-border-tertiary)">
+    ${courseTag(svc)}
+    <span style="font-size:11px;flex:1;cursor:pointer;color:var(--color-text-primary)" onclick="openModalItem(${dayIdx},'${moment}','${svc}')">${r.title}</span>
+    <button onclick="swapItem(${dayIdx},'${moment}','${svc}')" style="background:none;border:0.5px solid var(--color-border-secondary);border-radius:4px;padding:1px 6px;font-size:10px;color:var(--color-text-secondary);cursor:pointer;flex-shrink:0;white-space:nowrap">↻</button>
+  </div>`;
+}
+
+function renderAgenda(g){
+  // 1 ligne par jour, chaque ligne = déjeuner + dîner côte à côte
+  g.style.display = 'flex';
+  g.style.flexDirection = 'column';
+  g.style.gap = '10px';
+
+  const moments  = [...st.mealTypes];
+  const services = [...st.courseTypes];
+
+  st.menu.forEach((day, di)=>{
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden';
+
+    let html = `<div style="background:#4a6e50;color:#fff;padding:6px 12px;font-size:12px;font-weight:500">${day.name}</div>`;
+    html += `<div style="display:grid;grid-template-columns:${moments.map(()=>'1fr').join(' ')};border-bottom:none">`;
+
+    for(const mt of moments){
+      const mtLabel = mt==='dejeuner'?'🌞 Déjeuner':'🌙 Dîner';
+      html += `<div style="padding:8px 10px;border-right:0.5px solid var(--color-border-tertiary)">`;
+      html += `<div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-bottom:6px">${mtLabel}</div>`;
+      for(const svc of services){
+        html += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+    card.innerHTML = html;
+    g.appendChild(card);
+  });
+}
+
+function renderColumns(g){
+  // 1 colonne par jour
+  const moments  = [...st.mealTypes];
+  const services = [...st.courseTypes];
+  const N = st.menu.length;
+  const w = window.innerWidth;
+  const cols = w<=480 ? Math.min(N,2) : w<=700 ? Math.min(N,3) : Math.min(N,7);
+
+  g.style.display = 'grid';
+  g.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+
+  st.menu.forEach((day, di)=>{
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;display:flex;flex-direction:column';
+
+    let html = `<div style="background:#4a6e50;color:#fff;padding:5px 9px;font-size:11px;font-weight:500;text-align:center">${day.name}</div>`;
+
+    for(const mt of moments){
+      const mtLabel = mt==='dejeuner'?'🌞 Déj':'🌙 Dîner';
+      html += `<div style="padding:7px 9px;border-bottom:0.5px solid var(--color-border-tertiary)">`;
+      html += `<div style="font-size:10px;font-weight:500;color:var(--color-text-secondary);margin-bottom:5px">${mtLabel}</div>`;
+      for(const svc of services){
+        html += recipeRow(day.meals[mt]?.[svc], di, mt, svc);
+      }
+      html += `</div>`;
+    }
+    card.innerHTML = html;
+    g.appendChild(card);
   });
 }
 
 /* ============================================================
    MODAL
    ============================================================ */
-function openModal(idx){
-  const r=st.menu[idx];
-  document.getElementById('mTitle').textContent=r.title;
-  const isBerg=r.src==='berg';
-  document.getElementById('mBody').innerHTML=`
-    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+function openModalItem(dayIdx, moment, svc){
+  const day = st.menu[dayIdx];
+  if(!day) return;
+  const r = day.meals[moment]?.[svc];
+  if(!r) return;
+  document.getElementById('mTitle').textContent = r.title;
+  const isBerg = r.src==='berg';
+  document.getElementById('mBody').innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:9px">
       ${r.time?`<span class="bdg bdg-t">⏱ ${r.time} min</span>`:''}
+      ${courseTag(svc)}
       ${seasonBadges(r)}
       <span class="bdg" style="background:#f5f0ff;color:#5e35b1;font-size:.65rem">${r.src}</span>
     </div>
     <div class="msec">Ingrédients</div>
     <ul>${r.ings.map(i=>`<li>${i}</li>`).join('')}</ul>
     ${r.steps?.length?`<div class="msec">Préparation</div><ol>${r.steps.map(s=>`<li>${s}</li>`).join('')}</ol>`:''}
-    ${isBerg?'<div class="mnote">📱 Recette complète dans Bergamot.</div>':''}
+    ${isBerg?'<div class="mnote">Recette complète dans Bergamot.</div>':''}
     <div class="mlinks">
       <a class="mlink ${isBerg?'mlink-berg':'mlink-ext'}" href="${r.url}" target="_blank">
         ${isBerg?'📱 Ouvrir dans Bergamot':'🔗 Voir la recette'}
@@ -1330,6 +1445,9 @@ function openModal(idx){
     </div>`;
   document.getElementById('overlay').classList.add('on');
 }
+
+function openModal(idx){ openModalItem(idx,'plat','plat'); }
+
 function closeModal(){ document.getElementById('overlay').classList.remove('on'); }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){closeModal();closeSettings();} });
 
@@ -1342,11 +1460,15 @@ function cleanIng(i){ return i.replace(/^[\d\s.,/]+\s*(g|kg|ml|cl|l|càs|càc|bo
 function renderCourses(){
   if(!st.menu.length)return;
   const bycat={};
-  st.menu.flatMap(r=>r.ings).forEach(ing=>{
+  // Aplatir toutes les recettes de st.menu (nouvelle structure jours×moments×services)
+  const allRecipes = st.menu.flatMap(day =>
+    Object.values(day.meals).flatMap(meal => Object.values(meal))
+  ).filter(Boolean);
+  allRecipes.forEach(r=>{r.ings.forEach(ing=>{
     const c=catOf(ing),cl=cleanIng(ing);
     if(!cl||st.stock.some(s=>cl.toLowerCase().includes(s)))return;
     if(!bycat[c])bycat[c]=new Set(); bycat[c].add(cl);
-  });
+  });});
   let html=st.stock.length?`<div style="font-size:.69rem;color:var(--muted);background:#fdf6ee;border:1px solid var(--warm);border-radius:4px;padding:4px 8px;margin-bottom:8px">🧺 Exclus : <strong>${st.stock.join(', ')}</strong></div>`:'';
   for(const[c,items]of Object.entries(bycat)){
     if(!items.size)continue;
@@ -1397,6 +1519,16 @@ function getMealLabel(i){
   if(hasDej)  return 'Déjeuner';
   if(hasDin)  return 'Dîner';
   return MEALS[i];
+}
+
+
+function setView(mode){
+  st.viewMode = mode;
+  document.getElementById('btnViewA').style.background = mode==='agenda'  ? '#4a6e50' : 'none';
+  document.getElementById('btnViewB').style.background = mode==='columns' ? '#4a6e50' : 'none';
+  document.getElementById('btnViewA').style.color = '#fff';
+  document.getElementById('btnViewB').style.color = '#fff';
+  if(st.menu.length) renderMenus();
 }
 
 function buildCatList(){
