@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Menu Vegan</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--sage:#7a9e7e;--sage-light:#b5cdb8;--sage-dark:#4a6e50;--cream:#f7f3ec;--warm:#e8dfd0;--clay:#c4956a;--earth:#6b4f3a;--ink:#1a1a14;--muted:#8a8478;--white:#fff;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--ink);}
+
+/* HEADER */
+header{background:var(--sage-dark);color:var(--cream);padding:20px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+header h1{font-family:'Playfair Display',serif;font-size:1.85rem;font-weight:400;}
+header h1 span{color:var(--sage-light);font-style:italic;}
+.header-sub{font-size:.78rem;color:var(--sage-light);opacity:.75;margin-top:3px;}
+#hcount{font-size:.74rem;color:var(--sage-light);opacity:.7;transition:opacity .5s;}
+
+/* LOADING */
+#loadScreen{text-align:center;padding:60px 20px;}
+.spinner{width:38px;height:38px;border:3px solid var(--sage-light);border-top-color:var(--sage-dark);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.load-txt{color:var(--muted);font-style:italic;font-size:.88rem;}
+.load-bar-wrap{width:220px;height:5px;background:var(--warm);border-radius:3px;margin:10px auto 0;overflow:hidden;}
+.load-bar{height:100%;background:var(--sage-dark);border-radius:3px;width:0;transition:width .4s;}
+.load-err{color:#c0392b;background:#fdf2f2;border:1px solid #f5c6c6;border-radius:8px;padding:10px 14px;margin-top:14px;font-size:.83rem;max-width:400px;margin-left:auto;margin-right:auto;}
+
+/* MAIN */
+main{max-width:1180px;margin:0 auto;padding:20px 18px;}
+
+/* ZONES SAISIE */
+.zone{background:var(--white);border:1px solid var(--warm);border-radius:12px;padding:15px 17px;margin-bottom:16px;}
+.zone h3{font-family:'Playfair Display',serif;font-size:.96rem;color:var(--earth);margin-bottom:9px;display:flex;align-items:center;gap:6px;}
+.input-row{display:flex;gap:8px;}
+.txt-input{flex:1;font-family:'DM Sans',sans-serif;font-size:.875rem;border:1px solid var(--warm);border-radius:8px;padding:9px 12px;background:var(--cream);color:var(--ink);resize:none;min-height:42px;outline:none;transition:border-color .2s;line-height:1.4;}
+.txt-input:focus{border-color:var(--sage);}
+.txt-input::placeholder{color:var(--muted);}
+.btn-add{background:var(--sage-dark);color:var(--cream);border:none;border-radius:8px;padding:9px 15px;font-family:'DM Sans',sans-serif;font-size:.84rem;font-weight:500;cursor:pointer;white-space:nowrap;align-self:flex-end;transition:background .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.btn-add:hover,.btn-add:active{background:var(--sage);}
+.btn-add-stock{background:var(--earth);}
+.btn-add-stock:hover,.btn-add-stock:active{background:var(--clay);}
+.tags-wrap{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.tag{border-radius:20px;font-size:.75rem;padding:3px 9px;display:flex;align-items:center;gap:4px;}
+.tag-idea{background:#eef5ef;border:1px solid var(--sage-light);color:var(--sage-dark);}
+.tag-stock{background:#fdf6ee;border:1px solid var(--clay);color:var(--earth);}
+.tag button{background:none;border:none;cursor:pointer;color:var(--muted);font-size:.8rem;padding:0;line-height:1;touch-action:manipulation;}
+.tag button:hover{color:var(--earth);}
+.hint{font-size:.72rem;color:var(--muted);margin-top:7px;}
+
+/* CONTROLS */
+.controls{background:var(--white);border:1px solid var(--warm);border-radius:12px;padding:13px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+.ctrl-lbl{font-size:.75rem;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;}
+.controls button,.controls select{font-family:'DM Sans',sans-serif;font-size:.84rem;border-radius:8px;border:1px solid var(--warm);padding:7px 12px;background:var(--cream);color:var(--ink);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.btn-gen{background:var(--sage-dark)!important;color:var(--cream)!important;border-color:var(--sage-dark)!important;font-weight:500;transition:background .2s;}
+.btn-gen:hover,.btn-gen:active{background:var(--sage)!important;}
+.btn-gen:disabled{opacity:.5;cursor:not-allowed;}
+.btn-crs{background:var(--clay)!important;color:#fff!important;border-color:var(--clay)!important;font-weight:500;}
+.btn-crs:hover,.btn-crs:active{opacity:.85;}
+
+/* SEASON PILLS */
+.sp-wrap{display:flex;gap:5px;flex-wrap:wrap;}
+.sp{padding:4px 11px;border-radius:20px;font-size:.75rem;font-weight:500;cursor:pointer;border:2px solid transparent;transition:all .15s;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.08);}
+.sp-all{background:var(--warm);color:var(--earth);}        .sp-all.sel{border-color:var(--earth);}
+.sp-p{background:#e8f5e9;color:#2e7d32;}                   .sp-p.sel{border-color:#2e7d32;}
+.sp-s{background:#fff8e1;color:#f57f17;}                   .sp-s.sel{border-color:#f57f17;}
+.sp-a{background:#fff3e0;color:#bf360c;}                   .sp-a.sel{border-color:#bf360c;}
+.sp-w{background:#e3f2fd;color:#1565c0;}                   .sp-w.sel{border-color:#1565c0;}
+
+/* TOGGLE */
+.tgl{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid var(--warm);border-radius:8px;background:var(--cream);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.08);font-family:'DM Sans',sans-serif;font-size:.84rem;color:var(--ink);transition:border-color .2s;}
+.tgl:hover{border-color:var(--sage);}
+.tgl.on{border-color:var(--sage-dark);background:#eef5ef;}
+.tgl-dot{width:28px;height:16px;background:#ccc;border-radius:8px;position:relative;transition:background .2s;flex-shrink:0;}
+.tgl-dot::after{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.tgl.on .tgl-dot{background:var(--sage-dark);}
+.tgl.on .tgl-dot::after{left:14px;}
+
+/* SEASON BADGES */
+.sb{display:inline-flex;align-items:center;gap:3px;font-size:.64rem;padding:2px 6px;border-radius:10px;font-weight:500;white-space:nowrap;}
+.sb-p{background:#e8f5e9;color:#2e7d32;}.sb-s{background:#fff8e1;color:#f57f17;}
+.sb-a{background:#fff3e0;color:#bf360c;}.sb-w{background:#e3f2fd;color:#1565c0;}
+.sb-x{background:var(--warm);color:var(--earth);}
+
+/* GRID */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px;}
+@media(max-width:860px){.grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:480px){.grid{grid-template-columns:repeat(2,1fr);gap:9px;}}
+@media(max-width:340px){.grid{grid-template-columns:1fr;}}
+
+/* CARD */
+.card{background:var(--white);border:1px solid var(--warm);border-radius:11px;overflow:hidden;transition:box-shadow .2s,transform .2s;display:flex;flex-direction:column;}
+.card:hover{box-shadow:0 4px 16px rgba(74,110,80,.1);transform:translateY(-1px);}
+.card-day{background:var(--sage-dark);color:var(--cream);font-size:.67rem;font-weight:500;text-transform:uppercase;letter-spacing:1px;padding:6px 11px;display:flex;justify-content:space-between;align-items:center;}
+.meal-pill{background:rgba(255,255,255,.15);border-radius:4px;padding:2px 6px;font-size:.62rem;}
+.card-img{width:100%;height:100px;object-fit:cover;display:block;background:var(--warm);}
+.card-nophoto{width:100%;height:48px;background:linear-gradient(135deg,#e8f0e8,#d4e4d4);display:flex;align-items:center;justify-content:center;font-size:1.3rem;}
+.card-body{padding:10px 12px;flex:1;display:flex;flex-direction:column;gap:6px;}
+.card-title{font-family:'Playfair Display',serif;font-size:.9rem;font-weight:700;line-height:1.3;color:var(--earth);cursor:pointer;touch-action:manipulation;}
+.card-title:hover{text-decoration:underline;text-decoration-color:var(--sage-light);}
+.card-ings{font-size:.71rem;color:var(--muted);line-height:1.4;}
+.card-seasons{display:flex;flex-wrap:wrap;gap:3px;}
+.card-foot{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:auto;padding-top:7px;border-top:1px dashed var(--warm);}
+.bdg{font-size:.62rem;padding:2px 6px;border-radius:14px;font-weight:500;white-space:nowrap;}
+.bdg-t{background:var(--warm);color:var(--earth);}
+.bdg-m{background:#e3f2fd;color:#1565c0;font-style:italic;}
+.bdg-s{background:#e8f5e9;color:#2e7d32;}
+.bdg-stk{background:#fdf6ee;color:var(--earth);border:1px solid var(--clay);}
+.bdg-prot{background:#fff3e0;color:#e65100;border:1px solid #ffcc80;}
+.bdg-src{background:#f5f0ff;color:#5e35b1;border:1px solid #d1c4e9;font-size:.58rem;}
+.btn-swap{margin-left:auto;background:none;border:1px solid var(--warm);border-radius:5px;padding:3px 8px;font-size:.67rem;color:var(--muted);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.btn-swap:hover,.btn-swap:active{border-color:var(--sage);color:var(--sage-dark);}
+.prot-tip{font-size:.7rem;background:#fff8f0;border:1px solid #ffcc80;border-radius:5px;padding:5px 9px;margin-top:5px;color:#bf360c;display:flex;align-items:flex-start;gap:4px;line-height:1.4;}
+.prot-tip::before{content:'💪';flex-shrink:0;}
+
+/* COURSES */
+.courses{background:var(--white);border:1px solid var(--warm);border-radius:12px;padding:18px;display:none;margin-bottom:16px;}
+.courses.on{display:block;}
+.courses h2{font-family:'Playfair Display',serif;font-size:1.2rem;color:var(--earth);margin-bottom:13px;}
+.ccat{font-size:.73rem;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--sage-dark);margin:12px 0 5px;padding-bottom:3px;border-bottom:1px solid var(--warm);}
+.ccols{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:2px;}
+.citem{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:5px;font-size:.82rem;cursor:pointer;touch-action:manipulation;}
+.citem:hover{background:var(--cream);}
+.citem input{accent-color:var(--sage-dark);width:13px;height:13px;cursor:pointer;flex-shrink:0;}
+.citem label{cursor:pointer;}
+.citem.done label{text-decoration:line-through;color:var(--muted);}
+
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(26,26,20,.65);z-index:200;align-items:flex-end;justify-content:center;padding:0;}
+.overlay.on{display:flex;}
+.modal{background:var(--white);border-radius:14px 14px 0 0;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;box-shadow:0 -4px 30px rgba(0,0,0,.2);}
+.modal-drag{width:36px;height:4px;background:var(--warm);border-radius:2px;margin:10px auto 0;}
+.mhdr{padding:14px 18px 10px;border-bottom:1px solid var(--warm);display:flex;justify-content:space-between;align-items:flex-start;gap:10px;position:sticky;top:0;background:var(--white);z-index:1;}
+.mtitle{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--earth);line-height:1.3;}
+.mclose{background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--muted);padding:0 2px;flex-shrink:0;touch-action:manipulation;}
+.mbody{padding:13px 18px 24px;}
+.msec{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--sage-dark);margin:11px 0 5px;}
+.mbody ul{list-style:none;}
+.mbody ul li{padding:4px 0;font-size:.84rem;border-bottom:1px dashed var(--warm);}
+.mbody ul li::before{content:'→ ';color:var(--sage);}
+.mbody ol{padding-left:16px;}
+.mbody ol li{padding:4px 0;font-size:.83rem;line-height:1.5;}
+.mlinks{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px;padding-top:11px;border-top:1px solid var(--warm);}
+.mlink{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:8px;font-size:.8rem;font-family:'DM Sans',sans-serif;text-decoration:none;font-weight:500;transition:all .15s;touch-action:manipulation;}
+.mlink-berg{background:var(--sage-dark);color:var(--cream);}
+.mlink-berg:hover,.mlink-berg:active{background:var(--sage);}
+.mlink-ext{background:var(--earth);color:var(--cream);}
+.mlink-ext:hover,.mlink-ext:active{background:var(--clay);}
+.mnote{font-size:.71rem;color:var(--muted);background:var(--cream);border-radius:5px;padding:7px 9px;margin-top:9px;border:1px solid var(--warm);}
+
+/* MOBILE */
+@media(max-width:480px){
+  header{padding:13px 15px;}
+  header h1{font-size:1.45rem;}
+  main{padding:12px 11px;}
+  .controls{padding:11px 13px;gap:7px;}
+  .zone{padding:12px 13px;}
+  .input-row{flex-direction:column;}
+  .btn-add{width:100%;justify-content:center;text-align:center;}
+  .card-body{padding:9px 10px;}
+  .card-img{height:80px;}
+  .card-title{font-size:.85rem;}
+  .card-ings{display:none;}
+  .ccols{grid-template-columns:1fr 1fr;}
+  .modal{max-height:92vh;}
+  .mhdr{padding:12px 15px 9px;}
+  .mbody{padding:11px 15px 20px;}
+}
+@media(max-width:360px){
+  .grid{grid-template-columns:1fr;}
+}
+
+/* Refresh button */
+.btn-refresh{background:none;border:1px solid var(--sage-light);border-radius:6px;padding:4px 9px;font-size:.72rem;color:var(--sage-light);cursor:pointer;font-family:'DM Sans',sans-serif;touch-action:manipulation;}
+.btn-refresh:hover{border-color:var(--cream);color:var(--cream);}
+
+@media print{header,.controls,.zone,.btn-swap,.overlay{display:none!important;}.courses{display:block!important;}.card{break-inside:avoid;}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Menu <span>Vegan</span></h1>
+    <div class="header-sub">Recettes Bergamot · La Fée Stéphanie · Chargement automatique</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="hcount">⏳ Chargement…</span>
+    <button class="btn-refresh" onclick="reloadAll()" title="Mettre à jour les recettes">↺ Màj</button>
+  </div>
+</header>
+
+<main>
+  <!-- LOADING -->
+  <div id="loadScreen">
+    <div class="spinner"></div>
+    <div class="load-txt" id="loadTxt">Connexion à Bergamot…</div>
+    <div class="load-bar-wrap"><div class="load-bar" id="loadBar"></div></div>
+  </div>
+
+  <!-- APP -->
+  <div id="app" style="display:none">
+
+    <!-- ENVIES -->
+    <div class="zone">
+      <h3>💬 Mes envies de la semaine</h3>
+      <div class="input-row">
+        <textarea class="txt-input" id="ideaInput" rows="1" placeholder="Ex : poireaux, plat rapide, asiatique, pas de tofu…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addIdea();}"></textarea>
+        <button class="btn-add" onclick="addIdea()">+ Ajouter</button>
+      </div>
+      <div class="tags-wrap" id="ideaTags"></div>
+      <p class="hint">💡 Les recettes correspondantes sont favorisées et marquées ✨</p>
+    </div>
+
+    <!-- STOCK -->
+    <div class="zone">
+      <h3>🧺 Ingrédients en stock</h3>
+      <div class="input-row">
+        <input class="txt-input" id="stockInput" type="text" placeholder="Ex : lentilles, butternut, tofu, riz basmati…" onkeydown="if(event.key==='Enter')addStock()">
+        <button class="btn-add btn-add-stock" onclick="addStock()">+ Ajouter</button>
+      </div>
+      <div class="tags-wrap" id="stockTags"></div>
+      <p class="hint">🧺 Ces ingrédients sont favorisés · exclus de la liste de courses</p>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls">
+      <span class="ctrl-lbl">Saison :</span>
+      <div class="sp-wrap" id="spWrap">
+        <button class="sp sp-all sel" data-s="all" onclick="setSeason('all')">Toutes</button>
+        <button class="sp sp-p" data-s="spring" onclick="setSeason('spring')">🌸 Printemps</button>
+        <button class="sp sp-s" data-s="summer" onclick="setSeason('summer')">☀️ Été</button>
+        <button class="sp sp-a" data-s="autumn" onclick="setSeason('autumn')">🍂 Automne</button>
+        <button class="sp sp-w" data-s="winter" onclick="setSeason('winter')">❄️ Hiver</button>
+      </div>
+      <button id="strictBtn" class="tgl" onclick="toggleStrict()" style="display:none">
+        <div class="tgl-dot"></div><span>Strictement de saison</span>
+      </button>
+      <span class="ctrl-lbl" style="margin-left:4px">Repas :</span>
+      <select id="mealCount" onchange="generate()">
+        <option value="5">5</option>
+        <option value="6" selected>6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10">10</option>
+      </select>
+      <button id="protBtn" class="tgl" onclick="toggleProt()">
+        <div class="tgl-dot"></div><span>💪 Protéine à chaque repas</span>
+      </button>
+      <button class="btn-gen" id="btnGen" onclick="generate()" style="margin-left:auto">🎲 Générer</button>
+      <button class="btn-crs" onclick="toggleCourses()">🛒 Courses</button>
+      <button onclick="window.print()" title="Imprimer">🖨️</button>
+    </div>
+
+    <div class="grid" id="grid">
+      <div style="grid-column:1/-1;text-align:center;padding:44px;color:var(--muted);font-style:italic">
+        Exprime tes envies et clique sur « Générer » ✨
+      </div>
+    </div>
+
+    <div class="courses" id="coursesSection">
+      <h2>🛒 Liste de courses</h2>
+      <div id="coursesList"></div>
+    </div>
+
+  </div><!-- /app -->
+</main>
+
+<!-- MODAL -->
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modalBox">
+    <div class="modal-drag"></div>
+    <div class="mhdr">
+      <div class="mtitle" id="mTitle"></div>
+      <button class="mclose" onclick="closeModal()">✕</button>
+    </div>
+    <div class="mbody" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE3NTkiLCJpYXQiOjE3NzQxMDIxOTJ9.VQjY7ijdvLdSwxYgCmeNtaquTYHNawdHugT5-bGxAtg';
+const BERGAMOT_API = 'https://api.bergamot.app';
+const LAFEE_API    = 'https://www.lafeestephanie.com/wp-json/wp/v2';
+const LAFEE_CATS   = [6,7,3,4,14,25,8,21,15,5,31,22,23]; // catégories plats LaFee
+const VEGETAL_FEED = 'https://www.100-vegetal.com/feeds/posts/default/-/plat?max-results=50&alt=json';
+
+/* ============================================================
+   CONSTANTES DE DÉTECTION
+   ============================================================ */
+const NON_VEGAN = ['oeuf','œuf','lait de vache','lait entier','fromage de chèvre','parmesan',
+  'gruyère','emmental','beurre de vache','crème fraîche','viande','poulet','boeuf','porc',
+  'agneau','veau','saumon','thon','crevette','anchois','sardine','jambon','lardons'];
+
+const SEASON_VEG = {
+  p:['asperge','poireau','petits pois','épinard','fève','radis','artichaut','cresson','navet','blette','brocoli'],
+  s:['courgette','tomate','aubergine','poivron','concombre','haricot vert','maïs','fenouil','betterave','basilic','menthe'],
+  a:['courge','butternut','potimarron','potiron','champignon','chou-fleur','brocoli','poireau','céleri','panais','carotte','navet','pomme de terre'],
+  w:['chou','chou-fleur','poireau','céleri','panais','carotte','navet','pomme de terre','topinambour','endive','betterave','épinard'],
+};
+
+const STYLE_PATS = [
+  ['cu',['curry','tikka','masala','dhal','dal']],
+  ['ri',['risotto']],
+  ['gr',['gratin','dauphinois','boulangère']],
+  ['as',['wok','sauté sauce soja','sauce soja','sésame','thaï','thai','coréen','chinois','miso','teriyaki','udon','ramen','soba']],
+  ['ta',['tajine','tagine']],
+  ['pi',['pizza','focaccia']],
+  ['pa',['pasta','pâtes','lasagne','gnocchi','penne','spaghetti','tagliatelle','linguine','orzo','nouilles']],
+  ['so',['soupe','velouté','potage','minestrone','bouillon']],
+  ['sa',['salade','taboulé','bowl','buddha']],
+  ['co',['couscous','semoule']],
+  ['bu',['burger','sandwich','wrap','taco']],
+  ['mi',['mijoté','ragoût','blanquette','bourguignon','casserole','cocotte']],
+];
+
+const STYLE_GROUPS = {cu:1,ri:2,gr:3,as:4,ta:5,pi:6,pa:7,so:8,sa:9,co:10,bu:11,mi:12};
+
+const PROT_KW = ['tofu','tempeh','seitan','lentille','pois chiche','haricot','soja','pst',
+  'protéine','edamame','lupin','fève','quinoa','pois cassé'];
+
+const PROT_TIPS = {
+  pa:["Ajouter 150g de tofu sauté","Servir avec des lentilles vertes","Parsemer de pois chiches rôtis"],
+  gr:["Émietter du tofu fumé dessus","Ajouter une couche de lentilles","Incorporer des pois chiches"],
+  sa:["Ajouter du tofu mariné croustillant","Parsemer d'edamame","Servir avec des pois chiches rôtis"],
+  so:["Ajouter des lentilles corail","Incorporer des haricots blancs","Servir avec du tofu grillé"],
+  ri:["Servir avec du tempeh grillé","Ajouter du tofu sauté","Parsemer d'edamame"],
+  co:["Ajouter des pois chiches rôtis","Incorporer des lentilles vertes","Servir avec du tofu épicé"],
+  mi:["Ajouter du seitan","Incorporer des lentilles","Servir avec du tofu fumé"],
+  as:["Ajouter du tofu croustillant","Incorporer du tempeh mariné","Servir avec des edamame"],
+  pi:["Ajouter du tofu émietté","Parsemer de lentilles germées","Incorporer des pois chiches"],
+  bu:["Steak de tofu","Galette de pois chiches","Patty de lentilles"],
+  x: ["Ajouter 150g de tofu ferme poêlé","Servir avec des pois chiches rôtis","Incorporer des lentilles vertes"],
+};
+
+const SRC_LABELS = {'berg':'Bergamot','100veg':'100% Végétal','feeS':'La Fée Stéphanie'};
+const SB_INFO = {p:{c:'sb-p',i:'🌸'},s:{c:'sb-s',i:'☀️'},a:{c:'sb-a',i:'🍂'},w:{c:'sb-w',i:'❄️'}};
+const DAYS  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche','Lundi +','Mardi +','Mercredi +'];
+const MEALS = ['Déjeuner','Déjeuner','Déjeuner','Dîner','Dîner','Dîner','Déjeuner','Dîner','Déjeuner','Dîner'];
+
+/* ============================================================
+   ÉTAT
+   ============================================================ */
+const st = {
+  pool: [],        // toutes les recettes chargées
+  menu: [],        // menu actuel
+  ideas: [],
+  stock: [],
+  season: 'all',
+  strict: false,
+  prot: false,
+  courses: false,
+};
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function clean(s){ return s ? s.replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&#8217;/g,"'").replace(/&#8216;/g,"'").replace(/&nbsp;/g,' ').trim() : ''; }
+function isVegan(ings){ const t=ings.join(' ').toLowerCase(); return !NON_VEGAN.some(k=>t.includes(k)); }
+function parseDur(s){ const m=(s||'').match(/PT(?:(\d+)H)?(?:(\d+)M)?/); return m?(+m[1]||0)*60+(+m[2]||0):0; }
+
+function detectSeasons(title, ings){
+  const t=(title+' '+ings.join(' ')).toLowerCase();
+  return Object.entries(SEASON_VEG).filter(([,v])=>v.some(k=>t.includes(k))).map(([k])=>k).join('');
+}
+function detectStyle(title, ings){
+  const t=(title+' '+ings.join(' ')).toLowerCase();
+  for(const[code,kws]of STYLE_PATS) if(kws.some(k=>t.includes(k))) return code;
+  return 'x';
+}
+function hasProtein(r){ return PROT_KW.some(k=>(r.ings||[]).join(' ').toLowerCase().includes(k)); }
+function protTip(r){
+  const tips = PROT_TIPS[r.style]||PROT_TIPS.x;
+  return tips[Math.floor(Math.random()*tips.length)];
+}
+
+/* ============================================================
+   CHARGEMENT
+   ============================================================ */
+function setLoad(txt, pct){ document.getElementById('loadTxt').textContent=txt; document.getElementById('loadBar').style.width=pct+'%'; }
+
+async function loadAll(){
+  // Chaque source est isolée — une erreur n'arrête pas les autres
+  setLoad('Connexion à Bergamot…', 5);
+
+  let berg = [], lafee = [];
+
+  // Bergamot (source principale — obligatoire)
+  try {
+    berg = await loadBergamot();
+  } catch(e){
+    console.error('Bergamot:', e);
+    // Si Bergamot échoue, afficher l'erreur mais continuer
+    document.getElementById('loadTxt').textContent = 'Bergamot indisponible, chargement LaFée…';
+  }
+
+  // La Fée Stéphanie (source secondaire — optionnelle)
+  try {
+    lafee = await loadLaFee();
+  } catch(e){
+    console.warn('LaFee:', e);
+    lafee = [];
+  }
+
+  st.pool = [...berg, ...lafee];
+
+  if(st.pool.length === 0){
+    // Rien du tout — afficher l'erreur
+    document.getElementById('loadTxt').textContent = 'Impossible de charger les recettes';
+    const existing = document.querySelector('.load-err');
+    if(existing) existing.remove();
+    const err = document.createElement('div');
+    err.className = 'load-err';
+    err.innerHTML = `Aucune recette chargée. Vérifiez votre connexion internet.<br><button onclick="reloadAll()" style="margin-top:8px;padding:5px 12px;border-radius:6px;border:1px solid #c0392b;background:none;color:#c0392b;cursor:pointer;font-family:inherit">↺ Réessayer</button>`;
+    document.getElementById('loadScreen').appendChild(err);
+    return;
+  }
+
+  document.getElementById('loadScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  console.log(`[Menu] Pool total: ${st.pool.length} (${berg.length} Bergamot + ${lafee.length} LaFee)`);
+  document.getElementById('hcount').textContent =
+    `🌿 ${berg.length.toLocaleString('fr')} Bergamot · ${lafee.length} La Fée Stéphanie`;
+  setSeason(autoSeason());
+}
+
+async function loadBergamot(){
+  console.log('[Bergamot] Début chargement…');
+  setLoad('Chargement des recettes Bergamot…', 15);
+  const controller = new AbortController();
+  const timeout = setTimeout(()=>controller.abort(), 30000);
+  let res;
+  try {
+    res = await fetch(`${BERGAMOT_API}/recipes/`, {
+      headers:{'Authorization':`Bearer ${TOKEN}`},
+      signal: controller.signal
+    });
+  } finally { clearTimeout(timeout); }
+  if(!res.ok) throw new Error(`Bergamot HTTP ${res.status}`);
+  setLoad('Filtrage des plats vegan…', 40);
+  const all = await res.json();
+  console.log(`[Bergamot] ${all.length} recettes reçues`);
+
+  return all
+    .filter(r => {
+      if(!r.categories.includes(8603)) return false;
+      const ings = r.ingredients?.[0]?.data || [];
+      const steps = r.instructions?.[0]?.data || [];
+      return ings.length >= 3 && steps.length >= 1 && isVegan(ings);
+    })
+    .map(r => {
+      const ings = r.ingredients[0].data;
+      return {
+        id: r.id, sid: r.shortId, src: 'berg',
+        title: r.title.trim().slice(0,65),
+        photo: r.photos?.[0]?.photoThumbUrl || null,
+        time: r.time?.totalTime || 0,
+        ings: ings.slice(0,8),
+        steps: r.instructions[0].data.slice(0,6),
+        seasons: detectSeasons(r.title, ings),
+        style: detectStyle(r.title, ings),
+        url: `https://dashboard.bergamot.app/recipes/${r.id}`,
+      };
+    });
+}
+
+async function load100Vegetal(){
+  // 100-vegetal.com n'a pas de CORS — on ignore cette source depuis le navigateur
+  return [];
+}
+
+async function loadLaFee(){
+  setLoad('Chargement La Fée Stéphanie…', 55);
+  try {
+    // Récupérer le nombre de pages
+    const catsStr = LAFEE_CATS.join(',');
+    const ctrl = new AbortController();
+    const tmo = setTimeout(()=>ctrl.abort(), 20000);
+    let first;
+    try { first = await fetch(`${LAFEE_API}/posts?categories=${catsStr}&per_page=100&page=1&_fields=title,link,content`, {signal:ctrl.signal}); }
+    finally { clearTimeout(tmo); }
+    if(!first.ok) return [];
+    const totalPages = parseInt(first.headers.get('X-WP-TotalPages')||'1');
+    const firstPosts = await first.json();
+
+    // Charger toutes les pages en parallèle
+    const pageNums = Array.from({length: totalPages-1}, (_,i)=>i+2);
+    const otherPages = await Promise.all(
+      pageNums.map(p => fetch(`${LAFEE_API}/posts?categories=${catsStr}&per_page=100&page=${p}&_fields=title,link,content`)
+        .then(r=>r.ok?r.json():[]).catch(()=>[]))
+    );
+    const allPosts = [...firstPosts, ...otherPages.flat()];
+    setLoad(`La Fée : extraction de ${allPosts.length} recettes…`, 82);
+
+    return allPosts.map(p => extractWpRecipe(p, 'feeS')).filter(Boolean);
+  } catch(e){ console.warn('LaFee:', e); return []; }
+}
+
+function extractWpRecipe(post, srcTag){
+  const content = post?.content?.rendered || '';
+  const jldRe = /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g;
+  let m;
+  while((m = jldRe.exec(content)) !== null){
+    try {
+      const d = JSON.parse(m[1]);
+      const items = Array.isArray(d) ? d : (d['@graph'] ? d['@graph'] : [d]);
+      for(const item of items){
+        if(!item || item['@type'] !== 'Recipe') continue;
+        const ings = item.recipeIngredient || [];
+        if(ings.length < 3 || !isVegan(ings)) continue;
+        const rawSteps = item.recipeInstructions || [];
+        const steps = (Array.isArray(rawSteps)?rawSteps:[rawSteps])
+          .map(s=>typeof s==='object'?s.text||'':String(s)).filter(s=>s.trim());
+        const ir = item.image;
+        const photo = Array.isArray(ir)?ir[0]:(ir && typeof ir==='object'?ir.url:ir)||null;
+        const title = clean(item.name||'').slice(0,65);
+        if(!title) continue;
+        const url = post.link || '';
+        return {
+          id: url, sid: url, src: srcTag,
+          title, photo: photo ? String(photo) : null,
+          time: parseDur(item.totalTime||item.cookTime||''),
+          ings: ings.slice(0,8), steps: steps.slice(0,5),
+          seasons: detectSeasons(title, ings),
+          style: detectStyle(title, ings), url,
+        };
+      }
+    } catch{}
+  }
+  return null;
+}
+
+async function reloadAll(){
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loadScreen').style.display = 'block';
+  document.getElementById('hcount').textContent = '⏳ Mise à jour…';
+  st.pool = []; st.menu = [];
+  await loadAll();
+}
+
+/* ============================================================
+   SAISON
+   ============================================================ */
+function autoSeason(){ const m=new Date().getMonth()+1; return m>=3&&m<=5?'spring':m>=6&&m<=8?'summer':m>=9&&m<=11?'autumn':'winter'; }
+const SC = {spring:'p',summer:'s',autumn:'a',winter:'w'};
+
+function setSeason(s){
+  st.season=s;
+  document.querySelectorAll('.sp').forEach(p=>p.classList.remove('sel'));
+  document.querySelector(`[data-s="${s}"]`).classList.add('sel');
+  const sb=document.getElementById('strictBtn');
+  sb.style.display = s==='all'?'none':'inline-flex';
+  if(s==='all'){ st.strict=false; sb.classList.remove('on'); }
+}
+function toggleStrict(){ st.strict=!st.strict; document.getElementById('strictBtn').classList.toggle('on',st.strict); }
+function toggleProt(){ st.prot=!st.prot; document.getElementById('protBtn').classList.toggle('on',st.prot); if(st.menu.length) renderMenus(); }
+
+/* ============================================================
+   IDÉES & STOCK
+   ============================================================ */
+function addIdea(){
+  const inp=document.getElementById('ideaInput'), val=inp.value.trim();
+  if(!val) return;
+  val.split(/[,;]+/).map(s=>s.trim()).filter(Boolean).forEach(p=>{if(!st.ideas.includes(p))st.ideas.push(p);});
+  inp.value=''; renderTags();
+}
+function removeIdea(i){ st.ideas.splice(i,1); renderTags(); }
+function addStock(){
+  const inp=document.getElementById('stockInput'), val=inp.value.trim();
+  if(!val) return;
+  val.split(/[,;]+/).map(s=>s.trim().toLowerCase()).filter(Boolean).forEach(p=>{if(!st.stock.includes(p))st.stock.push(p);});
+  inp.value=''; renderTags();
+}
+function removeStock(i){ st.stock.splice(i,1); renderTags(); }
+function renderTags(){
+  document.getElementById('ideaTags').innerHTML  = st.ideas.map((t,i)=>`<div class="tag tag-idea"><span>${t}</span><button onclick="removeIdea(${i})">×</button></div>`).join('');
+  document.getElementById('stockTags').innerHTML = st.stock.map((t,i)=>`<div class="tag tag-stock"><span>${t}</span><button onclick="removeStock(${i})">×</button></div>`).join('');
+}
+
+function ideaScore(r){ if(!st.ideas.length) return 0; const h=(r.title+' '+r.ings.join(' ')+' '+r.style).toLowerCase(); let s=0; st.ideas.forEach(idea=>idea.toLowerCase().split(/\s+/).forEach(w=>{if(w.length>2&&h.includes(w))s++;})); return s; }
+function stockScore(r){ if(!st.stock.length) return 0; const h=r.ings.join(' ').toLowerCase(); return st.stock.filter(s=>h.includes(s)).length; }
+
+/* ============================================================
+   GÉNÉRATION
+   ============================================================ */
+function getPool(){
+  if(!st.strict || st.season==='all') return st.pool;
+  const c=SC[st.season];
+  return st.pool.filter(r=>!r.seasons||r.seasons.includes(c));
+}
+
+function score(r){
+  let s = ideaScore(r)*3 + stockScore(r)*2;
+  if(st.season!=='all' && (r.seasons===''||r.seasons.includes(SC[st.season]))) s+=2;
+  if(r.photo) s+=1;
+  if(r.time>0&&r.time<=60) s+=1;
+  if(st.prot && hasProtein(r)) s+=3;
+  return s;
+}
+
+function styleOk(r, sel){ const g=STYLE_GROUPS[r.style]||0; return !g||!sel.some(s=>(STYLE_GROUPS[s.style]||0)===g); }
+function vegOk(r, sel){
+  const allVeg = Object.values(SEASON_VEG).flat();
+  const used = new Set(sel.flatMap(s=>allVeg.filter(v=>s.ings.join(' ').toLowerCase().includes(v))));
+  return !allVeg.some(v=>r.ings.join(' ').toLowerCase().includes(v)&&used.has(v));
+}
+function shuffle(a){ const b=[...a]; for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];} return b; }
+
+function generate(){
+  if(!st.pool.length) return;
+  const N = parseInt(document.getElementById('mealCount').value)||6;
+  const pool = getPool();
+  const scored = shuffle(pool).map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
+  const sel = [];
+  for(const{r}of scored){ if(sel.length>=N) break; if(styleOk(r,sel)&&vegOk(r,sel)) sel.push(r); }
+  if(sel.length<N) for(const{r}of scored){ if(sel.length>=N) break; if(!sel.includes(r)&&styleOk(r,sel)) sel.push(r); }
+  if(sel.length<N) for(const{r}of scored){ if(sel.length>=N) break; if(!sel.includes(r)) sel.push(r); }
+  st.menu = sel;
+  renderMenus();
+  if(st.courses) renderCourses();
+}
+
+function swapMeal(idx){
+  const cur=st.menu[idx], others=st.menu.filter((_,i)=>i!==idx);
+  const pool=getPool().filter(r=>r.id!==cur.id&&!others.some(o=>o.id===r.id));
+  const compat=shuffle(pool.filter(r=>styleOk(r,others)));
+  const cands=compat.length?compat:shuffle(pool);
+  const scored=cands.map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
+  const topN=Math.max(1,Math.ceil(scored.length*.3));
+  st.menu[idx]=scored.slice(0,topN)[Math.floor(Math.random()*topN)].r;
+  renderMenus();
+  if(st.courses) renderCourses();
+}
+
+/* ============================================================
+   RENDU
+   ============================================================ */
+function seasonBadges(r){
+  if(!r.seasons) return '<span class="sb sb-x">🍽️ Toute saison</span>';
+  return r.seasons.split('').filter(c=>SB_INFO[c]).map(c=>`<span class="sb ${SB_INFO[c].c}">${SB_INFO[c].i}</span>`).join('');
+}
+
+function renderMenus(){
+  const N=parseInt(document.getElementById('mealCount').value)||6;
+  const g=document.getElementById('grid');
+  const w=window.innerWidth;
+  let cols = w<=480?Math.min(N,2):w<=780?Math.min(N,2):w<=1100?Math.min(N,3):N<=6?3:N<=8?4:5;
+  g.style.gridTemplateColumns=`repeat(${cols},1fr)`;
+  g.innerHTML='';
+  st.menu.forEach((r,i)=>{
+    const sc=ideaScore(r), isSeason=st.season!=='all'&&(!r.seasons||r.seasons.includes(SC[st.season]));
+    const isExt = r.src!=='berg';
+    const d=document.createElement('div'); d.className='card';
+    d.innerHTML=`
+      <div class="card-day">${DAYS[i]}<span class="meal-pill">${MEALS[i]}</span></div>
+      ${r.photo?`<img class="card-img" src="${r.photo}" alt="${r.title}" loading="lazy" onerror="this.style.display='none'">`:`<div class="card-nophoto">🥗</div>`}
+      <div class="card-body">
+        <div class="card-title" onclick="openModal(${i})">${r.title}</div>
+        <div class="card-ings">${r.ings.slice(0,4).join(' · ')}${r.ings.length>4?'…':''}</div>
+        <div class="card-seasons">${seasonBadges(r)}${isExt?`<span class="bdg bdg-src">${SRC_LABELS[r.src]||r.src}</span>`:''}</div>
+        <div class="card-foot">
+          ${r.time?`<span class="bdg bdg-t">⏱ ${r.time}min</span>`:''}
+          ${sc>0?'<span class="bdg bdg-m">✨</span>':''}
+          ${isSeason?'<span class="bdg bdg-s">✓saison</span>':''}
+          ${stockScore(r)>0?'<span class="bdg bdg-stk">🧺</span>':''}
+          ${hasProtein(r)?'<span class="bdg bdg-prot">💪</span>':''}
+          <button class="btn-swap" onclick="event.stopPropagation();swapMeal(${i})" title="Remplacer">↻</button>
+        </div>
+        ${st.prot&&!hasProtein(r)?`<div class="prot-tip">${protTip(r)}</div>`:''}
+      </div>`;
+    g.appendChild(d);
+  });
+}
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+function openModal(idx){
+  const r=st.menu[idx];
+  document.getElementById('mTitle').textContent=r.title;
+  const isBerg = r.src==='berg';
+  document.getElementById('mBody').innerHTML=`
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
+      ${r.time?`<span class="bdg bdg-t">⏱ ${r.time} min</span>`:''}
+      <span class="bdg" style="background:#e8f5e9;color:#388e3c">🌿 Vegan</span>
+      ${seasonBadges(r)}
+      <span class="bdg bdg-src">${SRC_LABELS[r.src]||r.src}</span>
+    </div>
+    <div class="msec">Ingrédients</div>
+    <ul>${r.ings.map(i=>`<li>${i}</li>`).join('')}</ul>
+    ${r.steps?.length?`<div class="msec">Préparation</div><ol>${r.steps.map(s=>`<li>${s}</li>`).join('')}</ol>`:''}
+    ${isBerg?'<div class="mnote">📱 Recette complète disponible dans Bergamot.</div>':''}
+    <div class="mlinks">
+      <a class="mlink ${isBerg?'mlink-berg':'mlink-ext'}" href="${r.url}" target="_blank">
+        ${isBerg?'📱 Ouvrir dans Bergamot':'🔗 Voir la recette'}
+      </a>
+    </div>`;
+  document.getElementById('overlay').classList.add('on');
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('on'); }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+
+/* ============================================================
+   LISTE DE COURSES
+   ============================================================ */
+const CAT_KW={
+  '🥬 Légumes frais':['courgette','aubergine','poireau','brocoli','chou','champignon','épinard','carotte','butternut','courge','patate','pomme de terre','tomate','blette','petits pois','navet','panais','poivron','fenouil','artichaut','asperge','céleri','potimarron'],
+  '🌿 Aromates & Herbes':['persil','coriandre','menthe','thym','basilic','laurier','roquette','oignon vert','ail','gingembre','oignon','échalote'],
+  '🧆 Légumineuses & Protéines':['pois chiche','lentille','haricot','tofu','tempeh','seitan','soja','jackfruit','pst','protéine','edamame'],
+  '🌾 Céréales & Féculents':['riz','couscous','semoule','pâtes','pâte','sarrasin','quinoa','boulgour','farine','pain','orge','millet','polenta'],
+  '🥫 Conserves & Sauces':['lait de coco','tomate concassée','tapenade','sauce soja','vinaigre','moutarde','sirop','beurre de cacahuète','miso','houmous','concentré','bouillon'],
+  '🫙 Épices & Condiments':['curry','cumin','curcuma','paprika','cannelle','ras el hanout','tikka','sumac','zaatar','muscade','sésame','piment','sel','poivre'],
+  '🛒 Autres':[],
+};
+function catOf(i){ const l=i.toLowerCase(); for(const[c,ks]of Object.entries(CAT_KW)) if(ks.some(k=>l.includes(k))) return c; return '🛒 Autres'; }
+function cleanIng(i){ return i.replace(/^[\d\s.,/]+\s*(g|kg|ml|cl|l|càs|càc|boîte|bouquet|gousse|branche|filet|sachet|tasse|cup)?\s*/i,'').trim(); }
+
+function renderCourses(){
+  if(!st.menu.length) return;
+  const bycat={};
+  st.menu.flatMap(r=>r.ings).forEach(ing=>{
+    const c=catOf(ing), cl=cleanIng(ing);
+    if(!cl||st.stock.some(s=>cl.toLowerCase().includes(s))) return;
+    if(!bycat[c]) bycat[c]=new Set();
+    bycat[c].add(cl);
+  });
+  let html = st.stock.length ? `<div style="font-size:.73rem;color:var(--muted);background:#fdf6ee;border:1px solid var(--warm);border-radius:5px;padding:6px 9px;margin-bottom:10px">🧺 Exclus (en stock) : <strong>${st.stock.join(', ')}</strong></div>` : '';
+  for(const[c,items]of Object.entries(bycat)){
+    if(!items.size) continue;
+    html+=`<div class="ccat">${c}</div><div class="ccols">`;
+    [...items].forEach((item,j)=>{
+      const id=`ci_${c.replace(/\W/g,'')}_${j}`;
+      html+=`<div class="citem" id="w_${id}"><input type="checkbox" id="${id}" onchange="document.getElementById('w_${id}').classList.toggle('done',this.checked)"><label for="${id}">${item}</label></div>`;
+    });
+    html+='</div>';
+  }
+  document.getElementById('coursesList').innerHTML=html;
+}
+function toggleCourses(){
+  st.courses=!st.courses;
+  const s=document.getElementById('coursesSection');
+  if(st.courses){ s.classList.add('on'); if(st.menu.length) renderCourses(); s.scrollIntoView({behavior:'smooth',block:'start'}); }
+  else s.classList.remove('on');
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+loadAll();
+</script>
+</body>
+</html>
