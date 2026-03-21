@@ -650,6 +650,8 @@ const BERG_CATS = {
 // st.catFilter est ajouté à l'état
 
 
+const SNACK_MOMENTS = new Set(['petitdej','gouter']);  // moments sans structure E/P/D
+const SNACK_CATS = [8608, 8607, 8606, 8604];  // Goûter/petit-déj, Pain, Cake, Dessert
 const COURSE_TYPE_MAP = {
   entree:  [8602, 15947, 8610, 31409],            // Entrée, Salade, Apéritif, Sandwich
   plat:    [8603, 16929, 15982, 35459, 35460],     // Plat principal, Tarte, Soupe, Simili, Boulettes
@@ -658,9 +660,11 @@ const COURSE_TYPE_MAP = {
   // 34519=Crémerie, 55286=Tartinade, 55447=Boisson, 79337=Crème chocolat
 };
 const EXCLUDED_CATS = [12689, 13569, 29062, 34519, 55286, 55447, 79337];
-const COURSE_LABELS = {entree:'Entrée', plat:'Plat', dessert:'Dessert'};
+// Ajouter snack dans le mapping cours
+COURSE_TYPE_MAP['snack'] = [8608, 8607, 8606, 8604, 8602, 8603];  // tout sauf exclus
+const COURSE_LABELS = {entree:'Entrée', plat:'Plat', dessert:'Dessert', snack:'Recette'};
 const MOMENT_LABELS = {petitdej:'🌅 Petit-déj', dejeuner:'🌞 Déjeuner', gouter:'🌤️ Goûter', diner:'🌙 Dîner'};
-const COURSE_COLORS = {entree:'#e8f5e9|#2e7d32', plat:'#e3f2fd|#1565c0', dessert:'#fce4ec|#880e4f'};
+const COURSE_COLORS = {entree:'#e8f5e9|#2e7d32', plat:'#e3f2fd|#1565c0', dessert:'#fce4ec|#880e4f', snack:'#fff8e1|#f57f17'};
 const DAY_NAMES = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche','Lundi +','Mardi +'];
 
 const SEASON_VEG = {
@@ -1304,20 +1308,23 @@ function generate(){
   if(!pool.length){ alert('Aucune recette pour ces filtres.'); return; }
 
   const moments  = [...st.mealTypes];    // ['dejeuner','diner'] ou sous-ensemble
-  const services = [...st.courseTypes];  // ['entree','plat','dessert'] ou sous-ensemble
+  // En mode snack (uniquement petit-déj/goûter) : pas de structure E/P/D
+  const allSnack = [...st.mealTypes].every(m => SNACK_MOMENTS.has(m));
+  const services = allSnack ? ['snack'] : [...st.courseTypes];
 
   // Construire un pool par service
   const poolByCourse = {};
+  const allKnownCats = Object.values(COURSE_TYPE_MAP).flat();
   for(const svc of services){
     const catIds = COURSE_TYPE_MAP[svc] || [];
-    // Recettes qui ont au moins une catégorie du service, OU aucune catégorie connue (plat par défaut)
-    const allKnownCats = Object.values(COURSE_TYPE_MAP).flat();
     poolByCourse[svc] = pool.filter(r=>{
       const rc = r.cats||[];
-      const hasCat = rc.some(c=>allKnownCats.includes(c));
+      // Exclure les cats non-repas
+      if(rc.some(c=>EXCLUDED_CATS.includes(c)) && rc.every(c=>EXCLUDED_CATS.includes(c))) return false;
+      const hasCat = rc.some(c=>allKnownCats.filter(x=>!EXCLUDED_CATS.includes(x)).includes(c));
       return !hasCat || rc.some(c=>catIds.includes(c));
     });
-    if(!poolByCourse[svc].length) poolByCourse[svc] = pool; // fallback
+    if(!poolByCourse[svc].length) poolByCourse[svc] = pool;
   }
 
   // Générer : jours × moments × services
@@ -1326,7 +1333,8 @@ function generate(){
     const dayObj = {name: DAY_NAMES[d]||`Jour ${d+1}`, meals:{}};
     for(const mt of moments){
       dayObj.meals[mt] = {};
-      for(const svc of services){
+      const mtServices = SNACK_MOMENTS.has(mt) ? ['snack'] : services;
+      for(const svc of mtServices){
         const p = poolByCourse[svc];
         // Anti-doublon global dans le service
         const alreadyUsed = days.flatMap(day=>
@@ -1335,8 +1343,8 @@ function generate(){
         const avail = shuffle(p.filter(r=>!alreadyUsed.includes(r.id)));
         const scored = avail.map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
         dayObj.meals[mt][svc] = scored[0]?.r || p[Math.floor(Math.random()*p.length)];
-      }
-    }
+      }  // fin for svc
+    }  // fin for mt
     days.push(dayObj);
   }
 
@@ -1520,8 +1528,8 @@ function renderCourses(){
 }
 
 function toggleMealType(mt){
-  if(st.mealTypes.has(mt)) {
-    if(st.mealTypes.size <= 1) return; // garder au moins 1
+  if(st.mealTypes.has(mt)){
+    if(st.mealTypes.size <= 1) return;
     st.mealTypes.delete(mt);
   } else {
     st.mealTypes.add(mt);
@@ -1529,8 +1537,31 @@ function toggleMealType(mt){
   document.querySelectorAll('[data-mt]').forEach(el=>{
     el.classList.toggle('active', st.mealTypes.has(el.getAttribute('data-mt')));
   });
-  // Mettre à jour les labels DAYS/MEALS selon la sélection
+  updateCourseTypeVisibility();
   updateMealLabels();
+}
+
+function updateCourseTypeVisibility(){
+  // Si tous les moments sélectionnés sont des snacks (petit-déj/goûter)
+  // → masquer et désactiver la section type de recette (entrée/plat/dessert)
+  const allSnack = [...st.mealTypes].every(m => SNACK_MOMENTS.has(m));
+  const ctGroup  = document.getElementById('courseTypeGroup');
+  const ctTitle  = ctGroup?.previousElementSibling;
+
+  if(ctGroup){
+    ctGroup.style.opacity   = allSnack ? '0.35' : '1';
+    ctGroup.style.pointerEvents = allSnack ? 'none' : 'auto';
+  }
+  if(ctTitle){
+    ctTitle.style.opacity   = allSnack ? '0.35' : '1';
+  }
+
+  // Si snack uniquement : forcer courseTypes à ['plat'] pour la génération
+  if(allSnack){
+    st._snackMode = true;
+  } else {
+    st._snackMode = false;
+  }
 }
 
 function toggleCourseType(ct){
