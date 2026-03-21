@@ -55,14 +55,15 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .diet-item:hover{background:var(--cream);}
 .diet-item.active{border-color:currentColor;background:var(--cream);}
 .diet-vegan{color:#1b5e20;}    .diet-vegan.active{background:#f1f8f1;}
+.diet-item.active{border-left:3px solid currentColor;padding-left:7px;}
 .diet-vege{color:#33691e;}     .diet-vege.active{background:#f4f9f0;}
 .diet-sporc{color:#880e4f;}    .diet-sporc.active{background:#fdf0f6;}
 .diet-sgluten{color:#e65100;}  .diet-sgluten.active{background:#fff8f2;}
 .diet-icon{font-size:1rem;flex-shrink:0;width:20px;text-align:center;}
 .diet-label{font-size:.83rem;font-weight:500;}
-.diet-check{margin-left:auto;width:16px;height:16px;border-radius:4px;border:1.5px solid var(--warm);background:var(--cream);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;transition:all .15s;}
-.diet-item.active .diet-check{background:currentColor;border-color:currentColor;color:#fff;}
-.diet-item.active .diet-check::after{content:'✓';color:#fff;font-weight:700;font-size:.65rem;}
+
+
+
 
 /* Saison */
 .season-list{display:flex;flex-direction:column;gap:4px;}
@@ -73,8 +74,8 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .s-s{color:#f57f17;}            .s-s.sel{background:#fff8e1;border-color:#f57f17;}
 .s-a{color:#bf360c;}            .s-a.sel{background:#fff3e0;border-color:#bf360c;}
 .s-w{color:#1565c0;}            .s-w.sel{background:#e3f2fd;border-color:#1565c0;}
-.season-check{margin-left:auto;width:14px;height:14px;border-radius:50%;border:1.5px solid var(--warm);flex-shrink:0;}
-.season-item.sel .season-check{background:currentColor;border-color:currentColor;}
+
+
 
 /* Strict toggle in sidebar */
 .strict-row{display:flex;align-items:center;gap:7px;padding:5px 9px;font-size:.78rem;color:var(--muted);cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;}
@@ -98,8 +99,8 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .prot-row.on{background:#fff8f0;border-color:#ffcc80;}
 .prot-row-icon{font-size:.95rem;width:20px;text-align:center;flex-shrink:0;}
 .prot-row-label{font-size:.82rem;font-weight:500;color:var(--ink);}
-.prot-row .diet-check{background:var(--cream);border-color:var(--warm);}
-.prot-row.on .diet-check{background:#e65100;border-color:#e65100;}
+
+
 
 /* Pool info */
 .pool-info-box{background:var(--cream);border-radius:7px;padding:8px 10px;font-size:.71rem;color:var(--muted);line-height:1.4;}
@@ -289,6 +290,19 @@ header h1 span{color:var(--sage-light);font-style:italic;}
   .courses{display:block!important;}
   .card{break-inside:avoid;}
 }
+
+/* Cat filter items */
+.cat-list{display:flex;flex-direction:column;gap:3px;}
+.cat-item{display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:7px;cursor:pointer;font-size:.8rem;border:1.5px solid transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none;transition:all .15s;color:var(--ink);}
+.cat-item:hover{background:var(--cream);}
+.cat-item.active{border-color:var(--sage-dark);background:#eef5ef;color:var(--sage-dark);font-weight:500;}
+.cat-count{margin-left:auto;font-size:.65rem;color:var(--muted);}
+.cat-item.active .cat-count{color:var(--sage-dark);}
+
+.toggle-group{display:flex;flex-wrap:wrap;gap:4px;}
+.tgl-btn{padding:4px 10px;border-radius:16px;font-size:.74rem;font-weight:500;cursor:pointer;border:1.5px solid var(--warm);background:var(--cream);color:var(--muted);font-family:inherit;touch-action:manipulation;user-select:none;-webkit-user-select:none;transition:all .15s;}
+.tgl-btn.active{background:var(--sage-dark);color:#fff;border-color:var(--sage-dark);}
+.tgl-btn:hover{border-color:var(--sage);}
 </style>
 </head>
 <body>
@@ -363,29 +377,36 @@ header h1 span{color:var(--sage-light);font-style:italic;}
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-inner">
 
+      <!-- Type de plat -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">🍽️ Type de plat</div>
+        <div class="cat-list" id="catList">
+          <!-- Généré dynamiquement après chargement -->
+          <div style="font-size:.71rem;color:var(--muted)">Chargement…</div>
+        </div>
+      </div>
+
       <!-- Régimes -->
       <div class="sidebar-section">
         <div class="sidebar-section-title">🥗 Régime alimentaire</div>
         <div class="diet-list">
-          <div class="diet-item diet-vegan"   data-diet="vegan"   onclick="toggleDiet('vegan')">
+          <div class="diet-item diet-vegan" data-diet="vegan" onclick="toggleDiet('vegan')">
             <span class="diet-icon">🌿</span>
             <span class="diet-label">Vegan</span>
-            <span class="diet-check"></span>
           </div>
           <div class="diet-item diet-vege"    data-diet="vege"    onclick="toggleDiet('vege')">
             <span class="diet-icon">🥚</span>
             <span class="diet-label">Végétarien</span>
-            <span class="diet-check"></span>
+            
           </div>
-          <div class="diet-item diet-sporc"   data-diet="sporc"   onclick="toggleDiet('sporc')">
+          <div class="diet-item diet-sporc" data-diet="sporc" onclick="toggleDiet('sporc')">
             <span class="diet-icon">🐷</span>
             <span class="diet-label">Sans porc</span>
-            <span class="diet-check"></span>
           </div>
           <div class="diet-item diet-sgluten" data-diet="sgluten" onclick="toggleDiet('sgluten')">
             <span class="diet-icon">🌾</span>
             <span class="diet-label">Sans gluten</span>
-            <span class="diet-check"></span>
+            
           </div>
         </div>
       </div>
@@ -394,11 +415,11 @@ header h1 span{color:var(--sage-light);font-style:italic;}
       <div class="sidebar-section">
         <div class="sidebar-section-title">📅 Saison</div>
         <div class="season-list">
-          <div class="season-item s-all sel" data-s="all"    onclick="setSeason('all')">   <span>🍽️</span> <span>Toutes saisons</span> <span class="season-check"></span></div>
-          <div class="season-item s-p"       data-s="spring" onclick="setSeason('spring')"><span>🌸</span> <span>Printemps</span>      <span class="season-check"></span></div>
-          <div class="season-item s-s"       data-s="summer" onclick="setSeason('summer')"><span>☀️</span> <span>Été</span>             <span class="season-check"></span></div>
-          <div class="season-item s-a"       data-s="autumn" onclick="setSeason('autumn')"><span>🍂</span> <span>Automne</span>        <span class="season-check"></span></div>
-          <div class="season-item s-w"       data-s="winter" onclick="setSeason('winter')"><span>❄️</span> <span>Hiver</span>          <span class="season-check"></span></div>
+          <div class="season-item s-all sel" data-s="all"    onclick="setSeason('all')">   <span>🍽️</span> <span>Toutes saisons</span> </div>
+          <div class="season-item s-p"       data-s="spring" onclick="setSeason('spring')"><span>🌸</span> <span>Printemps</span>      </div>
+          <div class="season-item s-s"       data-s="summer" onclick="setSeason('summer')"><span>☀️</span> <span>Été</span>             </div>
+          <div class="season-item s-a"       data-s="autumn" onclick="setSeason('autumn')"><span>🍂</span> <span>Automne</span>        </div>
+          <div class="season-item s-w"       data-s="winter" onclick="setSeason('winter')"><span>❄️</span> <span>Hiver</span>          </div>
         </div>
         <div class="strict-row" id="strictRow" onclick="toggleStrict()" style="display:none;margin-top:6px">
           <div class="tgl-dot" id="strictDot"></div>
@@ -408,9 +429,9 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 
       <!-- Repas -->
       <div class="sidebar-section">
-        <div class="sidebar-section-title">🍽️ Nombre de repas</div>
-        <div class="repas-row">
-          <span class="repas-label">Repas par semaine</span>
+        <div class="sidebar-section-title">🍽️ Repas</div>
+        <div class="repas-row" style="margin-bottom:10px">
+          <span class="repas-label">Nombre par semaine</span>
           <div class="repas-stepper">
             <button class="btn-step" onclick="changeRepas(-1)">−</button>
             <span class="repas-val" id="repasVal">6</span>
@@ -418,6 +439,17 @@ header h1 span{color:var(--sage-light);font-style:italic;}
           </div>
         </div>
         <input type="hidden" id="mealCount" value="6">
+        <div class="sidebar-section-title" style="margin-bottom:6px">Moment du repas</div>
+        <div class="toggle-group" id="mealTypeGroup">
+          <button class="tgl-btn active" data-mt="dejeuner" onclick="toggleMealType('dejeuner')">🌞 Déjeuner</button>
+          <button class="tgl-btn active" data-mt="diner"    onclick="toggleMealType('diner')">🌙 Dîner</button>
+        </div>
+        <div class="sidebar-section-title" style="margin-top:10px;margin-bottom:6px">Type de recette</div>
+        <div class="toggle-group" id="courseTypeGroup">
+          <button class="tgl-btn active" data-ct="entree"  onclick="toggleCourseType('entree')">🥗 Entrée</button>
+          <button class="tgl-btn active" data-ct="plat"    onclick="toggleCourseType('plat')">🍲 Plat</button>
+          <button class="tgl-btn active" data-ct="dessert" onclick="toggleCourseType('dessert')">🍰 Dessert</button>
+        </div>
       </div>
 
       <!-- Protéine -->
@@ -426,7 +458,6 @@ header h1 span{color:var(--sage-light);font-style:italic;}
         <div class="prot-row" id="protRow" onclick="toggleProt()">
           <span class="prot-row-icon">💪</span>
           <span class="prot-row-label">Protéine à chaque repas</span>
-          <span class="diet-check" id="protCheck"></span>
         </div>
       </div>
 
@@ -570,6 +601,32 @@ const DIET_FILTERS = {
   },
 };
 
+/* Catégories Bergamot pour le filtre type de plat */
+const BERG_CATS = {
+  8602:  {emoji:'🥗', label:'Entrée'},
+  8603:  {emoji:'🍲', label:'Plat principal'},
+  8604:  {emoji:'🍰', label:'Dessert'},
+  8608:  {emoji:'☕', label:'Petit déj & goûter'},
+  8610:  {emoji:'🍸', label:'Apéritif'},
+  15947: {emoji:'🥙', label:'Salade'},
+  15982: {emoji:'🍜', label:'Soupe'},
+  16929: {emoji:'🥧', label:'Tarte & quiche'},
+  31409: {emoji:'🥪', label:'Sandwich'},
+  35459: {emoji:'🌿', label:'Simili carne'},
+  35460: {emoji:'🧆', label:'Boulettes & galettes'},
+};
+
+// Filtre type actif : Set de cat IDs, vide = tous
+// st.catFilter est ajouté à l'état
+
+
+/* Mapping catégories Bergamot → type de recette */
+const COURSE_TYPE_MAP = {
+  entree:  [8602, 15947, 8610, 31409],          // Entrée, Salade, Apéritif, Sandwich
+  plat:    [8603, 16929, 15982, 35459, 35460],   // Plat principal, Tarte/quiche, Soupe, Simili carne, Boulettes
+  dessert: [8604, 8606, 8608],                   // Dessert, Cake, Goûter
+};
+
 const SEASON_VEG = {
   p:['asperge','poireau','petits pois','épinard','fève','radis','artichaut','cresson','navet','blette','brocoli'],
   s:['courgette','tomate','aubergine','poivron','concombre','haricot vert','maïs','fenouil','betterave','basilic','menthe'],
@@ -619,6 +676,9 @@ const st = {
   season: 'all', strict: false,
   prot: false, courses: false,
   diets: new Set(),  // filtres actifs : 'vegan','vege','sporc','sgluten'
+  catFilter: new Set(),  // filtre type de plat : Set de cat IDs Bergamot
+  mealTypes: new Set(['dejeuner','diner']),    // moment : déjeuner et/ou dîner
+  courseTypes: new Set(['entree','plat','dessert']),  // type : entrée/plat/dessert
   token: null,
   sites: [],
 };
@@ -663,6 +723,20 @@ function setLoad(txt,pct){ setEl('loadTxt','textContent',txt); const _lb=documen
    FILTRES ALIMENTAIRES
    ============================================================ */
 function passesFilter(r){
+  // Filtre type de plat (sidebar cat-item)
+  if(st.catFilter.size){
+    const rcats = r.cats || [];
+    if(!rcats.some(c => st.catFilter.has(c))) return false;
+  }
+  // Filtre type de recette (entrée/plat/dessert)
+  if(st.courseTypes.size < 3){
+    const rcats = r.cats || [];
+    const allowed = [...st.courseTypes].flatMap(ct => COURSE_TYPE_MAP[ct] || []);
+    // Si la recette n'a aucune catégorie listée → on la garde (recette sans cat claire)
+    const hasCat = rcats.some(c => Object.values(COURSE_TYPE_MAP).flat().includes(c));
+    if(hasCat && !rcats.some(c => allowed.includes(c))) return false;
+  }
+  // Filtre régime alimentaire
   if(!st.diets.size) return true;
   const ingsText = r.ings.join(' ').toLowerCase();
   const titleText = r.title.toLowerCase();
@@ -673,6 +747,18 @@ function passesFilter(r){
     if(f.title.some(kw => titleText.includes(kw))) return false;
   }
   return true;
+}
+
+function toggleCatFilter(catId){
+  const id = parseInt(catId);
+  if(st.catFilter.has(id)) st.catFilter.delete(id);
+  else st.catFilter.add(id);
+  // Mettre à jour l'UI
+  document.querySelectorAll('.cat-item').forEach(el=>{
+    const c = parseInt(el.getAttribute('data-cat'));
+    el.classList.toggle('active', st.catFilter.has(c));
+  });
+  applyDietFilters();
 }
 
 function applyDietFilters(){
@@ -855,6 +941,9 @@ async function startLoading(){
   document.getElementById('btnSettings').style.display='inline-flex';
   document.getElementById('btnRefresh').style.display='inline-flex';
 
+  // Construire la liste des types de plat avec leurs comptages réels
+  buildCatList();
+
   if(st.allRecipes.length===0){
     document.getElementById('grid').innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">Aucune recette. <span style="text-decoration:underline;cursor:pointer" onclick="openSettings()">Vérifiez la configuration ⚙️</span></div>`;
   } else {
@@ -926,6 +1015,7 @@ function toRecipe(r){
     time:    r.tm || r.time || 0,
     ings:    ings,
     steps:   r.st || r.steps || [],
+    cats:    r.c  || r.cats  || [],   // catégories Bergamot
     seasons: detectSeasons(title, ings),
     style:   detectStyle(title, ings),
     url:     `https://dashboard.bergamot.app/recipes/${r.id}`,
@@ -1266,6 +1356,72 @@ function renderCourses(){
   }
   document.getElementById('coursesList').innerHTML=html;
 }
+
+function toggleMealType(mt){
+  if(st.mealTypes.has(mt)) {
+    if(st.mealTypes.size <= 1) return; // garder au moins 1
+    st.mealTypes.delete(mt);
+  } else {
+    st.mealTypes.add(mt);
+  }
+  document.querySelectorAll('[data-mt]').forEach(el=>{
+    el.classList.toggle('active', st.mealTypes.has(el.getAttribute('data-mt')));
+  });
+  // Mettre à jour les labels DAYS/MEALS selon la sélection
+  updateMealLabels();
+}
+
+function toggleCourseType(ct){
+  if(st.courseTypes.has(ct)){
+    if(st.courseTypes.size <= 1) return; // garder au moins 1
+    st.courseTypes.delete(ct);
+  } else {
+    st.courseTypes.add(ct);
+  }
+  document.querySelectorAll('[data-ct]').forEach(el=>{
+    el.classList.toggle('active', st.courseTypes.has(el.getAttribute('data-ct')));
+  });
+  applyDietFilters();
+}
+
+function updateMealLabels(){
+  // Recalcule les noms de colonnes selon les moments sélectionnés
+  applyDietFilters();
+  if(st.menu.length) renderMenus();
+}
+
+function getMealLabel(i){
+  const hasDej = st.mealTypes.has('dejeuner');
+  const hasDin = st.mealTypes.has('diner');
+  if(hasDej && hasDin) return MEALS[i];
+  if(hasDej)  return 'Déjeuner';
+  if(hasDin)  return 'Dîner';
+  return MEALS[i];
+}
+
+function buildCatList(){
+  const counts = {};
+  for(const r of st.allRecipes){
+    for(const c of (r.cats||[])){
+      if(BERG_CATS[c]) counts[c] = (counts[c]||0) + 1;
+    }
+  }
+  const container = document.getElementById('catList');
+  if(!container) return;
+  // Trier par nombre décroissant, ne montrer que ceux avec des recettes
+  const sorted = Object.entries(BERG_CATS)
+    .map(([id,info]) => ({id:+id, ...info, count: counts[+id]||0}))
+    .filter(c => c.count > 0)
+    .sort((a,b) => b.count - a.count);
+  container.innerHTML = sorted.map(c =>
+    `<div class="cat-item" data-cat="${c.id}" onclick="toggleCatFilter(${c.id})">
+      <span>${c.emoji}</span>
+      <span>${c.label}</span>
+      <span class="cat-count">${c.count.toLocaleString('fr')}</span>
+    </div>`
+  ).join('');
+}
+
 function toggleCourses(){
   st.courses=!st.courses;
   const s=document.getElementById('coursesSection');

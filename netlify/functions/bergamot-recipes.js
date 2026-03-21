@@ -1,12 +1,9 @@
 exports.handler = async (event, context) => {
-  // Timeout Netlify Free = 10s — on streame pour rester dans les clous
   const token = event.headers.authorization || event.headers.Authorization;
   if (!token) return { statusCode: 401, body: 'Token manquant' };
 
-  const BERG_API = 'https://api.bergamot.app';
-
   try {
-    const res = await fetch(`${BERG_API}/recipes/`, {
+    const res = await fetch('https://api.bergamot.app/recipes/', {
       headers: { 'Authorization': token },
     });
     if (!res.ok) return { statusCode: res.status, body: `Bergamot error ${res.status}` };
@@ -16,9 +13,9 @@ exports.handler = async (event, context) => {
 
     for (const r of all) {
       const cats  = r.categories || [];
-      if (!cats.includes(8603)) continue;
       const ings  = (r.ingredients  || [])[0]?.data || [];
       const steps = (r.instructions || [])[0]?.data || [];
+      // Toutes les recettes avec ingrédients + instructions (plus de filtre catégorie)
       if (ings.length < 2 || steps.length < 1) continue;
       const photos = r.photos || [];
       out.push({
@@ -28,6 +25,7 @@ exports.handler = async (event, context) => {
         tm: r.time?.totalTime || 0,
         in: ings.slice(0, 10),
         st: steps.slice(0, 5),
+        c:  cats,
       });
     }
 
