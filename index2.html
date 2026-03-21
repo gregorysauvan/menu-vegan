@@ -480,15 +480,7 @@ header h1 span{color:var(--sage-light);font-style:italic;}
         </div>
       </div>
 
-      <!-- Type de plat -->
-      <div class="sidebar-section">
-        <div class="sidebar-section-title collapsed" onclick="toggleSection(this)">🍽️ Type de plat <span class="chevron">▾</span></div>
-        <div class="section-body collapsed">
-          <div class="cat-list" id="catList">
-            <div style="font-size:.71rem;color:var(--muted)">Chargement…</div>
-          </div>
-        </div><!-- /section-body -->
-      </div><!-- /sidebar-section -->
+
 
       <!-- Régime alimentaire -->
       <div class="sidebar-section">
@@ -967,38 +959,78 @@ async function checkSite(urlInputId, btnId, msgId, listId){
 
 async function detectSiteCompat(url){
   const base = url.replace(/\/$/,'');
-  // 1. WordPress REST API — via proxy Netlify pour éviter CORS
-  async function pFetch(url){
-    try{ return await fetch(`/.netlify/functions/check-site?url=${encodeURIComponent(url)}`,{signal:AbortSignal.timeout(10000)}); }
-    catch(e){ return await fetch(url,{signal:AbortSignal.timeout(8000)}); }
+
+  // Tout passe par le proxy Netlify pour éviter le CORS
+  async function pGet(u){
+    const r = await fetch(`/.netlify/functions/check-site?url=${encodeURIComponent(u)}`,
+      {signal:AbortSignal.timeout(12000)});
+    return r;
   }
+
+  // 1. Tenter WP REST API
   try {
-    const r = await pFetch(`${base}/wp-json/wp/v2/posts?per_page=10&_fields=title,link,content`);
+    const r = await pGet(`${base}/wp-json/wp/v2/posts?per_page=3&_fields=title,link`);
     if(r.ok){
-      const cors  = r.headers.get('access-control-allow-origin');
       const total = parseInt(r.headers.get('X-WP-Total')||'0');
-      const posts = await r.json();
-      const hasRecipe = posts.some(p=>{const c=p?.content?.rendered||''; return c.includes('"@type":"Recipe"')||c.includes('"@type": "Recipe"');});
-      if(!cors) return {compatible:true, type:'wordpress', name:new URL(url).hostname.replace('www.',''), count:total, detail:'WordPress · recettes détectées (via proxy)'};
-      if(!hasRecipe) return {compatible:false, detail:'WordPress accessible (CORS OK) mais aucune fiche recette structurée détectée'};
-      const name = new URL(url).hostname.replace('www.','');
-      return {compatible:true, type:'wordpress', name, count:total, detail:`WordPress · ${total} articles · recettes détectées`};
+      const data  = await r.json();
+      if(Array.isArray(data) && data.length > 0){
+        // Vérifier qu'une page a bien du JSON-LD Recipe
+        const link = data[0]?.link;
+        if(link){
+          const pr = await pGet(link);
+          if(pr.ok){
+            const pageHtml = await pr.text();
+            const hasRecipe = /"@type"\s*:\s*"Recipe"/.test(pageHtml);
+            if(hasRecipe){
+              const name = new URL(base).hostname.replace('www.','');
+              return {compatible:true, type:'wordpress-html', name, count:total||data.length,
+                detail:`WordPress · ${total||'?'} articles · recettes JSON-LD détectées`};
+            }
+          }
+        }
+        // WP dispo mais pas de JSON-LD Recipe détecté sur le premier article
+        const name = new URL(base).hostname.replace('www.','');
+        return {compatible:false,
+          detail:`WordPress accessible mais aucune fiche recette structurée (JSON-LD) trouvée sur ce site`};
+      }
     }
-  } catch{}
-  // 2. Blogger JSON feed
-  try {
-    const r = await pFetch(`${base}/feeds/posts/default?alt=json&max-results=3`);
-    if(r.ok){
-      const cors = r.headers.get('access-control-allow-origin');
-      const data = await r.json();
-      const entries = data?.feed?.entry||[];
-      if(!cors) return {compatible:false, detail:'Blogger détecté mais CORS bloqué'};
-      if(!entries.length) return {compatible:false, detail:'Blogger accessible mais aucun article trouvé'};
-      const name = new URL(url).hostname.replace('www.','');
-      return {compatible:true, type:'blogger', name, count:0, detail:`Blogger · flux accessible`};
-    }
-  } catch{}
-  return {compatible:false, detail:'Site non reconnu. Formats supportés : WordPress avec plugin recette (JSON-LD), Blogger avec CORS activé'};
+  } catch(e){ console.warn('WP API:', e); }
+
+  // 2. Tenter RSS WordPress ou Blogger
+  for(const feed of ['/feed/', '/feeds/posts/default?alt=rss']){
+    try {
+      const r = await pGet(`${base}${feed}`);
+      if(r.ok){
+        const text = await r.text();
+        if(text.includes('<rss') || text.includes('<feed')){
+          // Trouver un lien article et vérifier le JSON-LD
+          const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)].map(m=>m[1]);
+          const articleLink = links.find(l=>l!==base && l!==base+'/');
+          if(articleLink){
+            const pr = await pGet(articleLink);
+            if(pr.ok){
+              const pageHtml = await pr.text();
+              const hasRecipe = /"@type"\s*:\s*"Recipe"/.test(pageHtml);
+              const isBlogger = feed.includes('feeds');
+              const type = isBlogger ? 'blogger-html' : 'wordpress-html';
+              const name = new URL(base).hostname.replace('www.','');
+              // Compter les liens
+              const count = links.filter(l=>l!==base&&l!==base+'/').length;
+              if(hasRecipe)
+                return {compatible:true, type, name, count,
+                  detail:`${isBlogger?'Blogger':'WordPress'} · recettes JSON-LD détectées`};
+              else
+                return {compatible:false,
+                  detail:`${isBlogger?'Blogger':'WordPress'} accessible mais pas de fiches recettes structurées`};
+            }
+          }
+        }
+      }
+    } catch(e){ console.warn('RSS:', e); }
+  }
+
+  return {compatible:false,
+    detail:'Site non reconnu ou aucune fiche recette structurée (JSON-LD) trouvée'};
 }
 
 function renderSiteList(listId){
@@ -1179,68 +1211,115 @@ async function clearBergamotCache(){
 
 
 async function loadExternalSite(site){
-  // Tous les fetches passent par la Netlify Function pour éviter les erreurs CORS
-  async function proxyFetch(url){
-    const proxyUrl = `/.netlify/functions/check-site?url=${encodeURIComponent(url)}`;
-    try {
-      const r = await fetch(proxyUrl, {signal:AbortSignal.timeout(20000)});
-      return r;
-    } catch(e){
-      // Fallback direct (dev local)
-      return await fetch(url, {signal:AbortSignal.timeout(15000)});
-    }
+  async function pGet(u){
+    const r = await fetch(`/.netlify/functions/check-site?url=${encodeURIComponent(u)}`,
+      {signal:AbortSignal.timeout(20000)});
+    return r;
   }
 
-  if(site.type==='wordpress'){
-    const base = site.url.replace(/\/$/,'');
-    const r = await proxyFetch(`${base}/wp-json/wp/v2/posts?per_page=100&page=1&_fields=title,link,content`);
-    if(!r.ok) return [];
-    const totalPages = parseInt(r.headers.get('X-WP-TotalPages')||'1');
-    const first = await r.json();
-    const others = await Promise.all(
-      Array.from({length:Math.min(totalPages-1,9)},(_,i)=>i+2).map(p=>
-        proxyFetch(`${base}/wp-json/wp/v2/posts?per_page=100&page=${p}&_fields=title,link,content`)
-          .then(r=>r.ok?r.json():[]).catch(()=>[])
-      )
-    );
-    const srcTag = site.name||new URL(site.url).hostname.replace('www.','');
-    return [...first,...others.flat()].map(p=>extractWpRecipe(p,srcTag)).filter(Boolean);
-  }
-
-  if(site.type==='blogger'){
-    const base = site.url.replace(/\/$/,'');
-    const results = [];
-    for(let start=0; start<300; start+=50){
+  function extractRecipeFromHtml(pageHtml, fallbackUrl, srcTag){
+    const jldBlocks = [...pageHtml.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/g)]
+      .map(m=>m[1]);
+    for(const block of jldBlocks){
       try {
-        const r = await proxyFetch(`${base}/feeds/posts/default?alt=json&max-results=50&start-index=${start+1}`);
-        if(!r.ok) break;
-        const data = await r.json();
-        const entries = data?.feed?.entry||[];
-        if(!entries.length) break;
-        const srcTag = site.name||new URL(site.url).hostname.replace('www.','');
-        for(const e of entries){
-          const cats = (e.category||[]).map(c=>c.term?.toLowerCase()||'');
-          if(cats.includes('compil')) continue;
-          const link = (e.link||[]).find(l=>l.rel==='alternate')?.href||'';
-          if(!link) continue;
-          const content = e.content?.['$t']||'';
-          const ings = [...content.matchAll(/itemprop="ingredients?"[^>]*>([\s\S]*?)<\/li>/g)]
-            .map(m=>clean(m[1])).filter(i=>i.length>3);
-          if(ings.length<2) continue;
-          const steps = [...content.matchAll(/itemprop="(?:recipeInstructions?|instructions?)"[^>]*>([\s\S]*?)<\/(?:li|p|div)>/g)]
-            .map(m=>clean(m[1])).filter(s=>s.length>10);
-          const imgM = content.match(/src="(https:\/\/blogger\.googleusercontent[^"]+)"/);
-          const title = e.title?.['$t']?.trim()||'';
+        const d = JSON.parse(block.trim());
+        const items = Array.isArray(d) ? d : (d['@graph'] ? d['@graph'] : [d]);
+        for(const item of items){
+          if(!item || !/"?Recipe"?/.test(JSON.stringify(item['@type']||''))) continue;
+          const ings  = item.recipeIngredient || [];
+          if(ings.length < 2) continue;
+          const rawSteps = item.recipeInstructions || [];
+          const steps = (Array.isArray(rawSteps)?rawSteps:[rawSteps])
+            .map(s=>typeof s==='object'?(s.text||''):String(s)).filter(s=>s.trim());
+          const img   = item.image;
+          const photo = Array.isArray(img)?img[0]:(img&&typeof img==='object'?img.url:img)||null;
+          const title = (item.name||'').replace(/<[^>]+>/g,'').trim().slice(0,65);
           if(!title) continue;
-          results.push({id:link,src:srcTag,title:title.slice(0,65),photo:imgM?.[1]||null,
-            time:0,ings:ings.slice(0,10),steps:steps.slice(0,5),cats:[],
-            seasons:detectSeasons(title,ings),style:detectStyle(title,ings),url:link});
+          return {
+            id: fallbackUrl, src: srcTag,
+            title, photo: photo?String(photo):null,
+            time: parseDur(item.totalTime||item.cookTime||''),
+            ings: ings.slice(0,10), steps: steps.slice(0,5), cats:[],
+            seasons: detectSeasons(title, ings),
+            style:   detectStyle(title, ings),
+            url: fallbackUrl,
+          };
         }
-      } catch { break; }
+      } catch(e){}
+    }
+    return null;
+  }
+
+  const base    = site.url.replace(/\/$/,'');
+  const srcTag  = site.name || new URL(site.url).hostname.replace('www.','');
+  const results = [];
+
+  if(site.type === 'wordpress-html'){
+    // 1. Récupérer la liste des articles via WP REST API (proxy)
+    const PER_PAGE = 50;
+    let page = 1, totalPages = 1;
+    const allLinks = [];
+    while(page <= Math.min(totalPages, 10)){
+      try {
+        const r = await pGet(`${base}/wp-json/wp/v2/posts?per_page=${PER_PAGE}&page=${page}&_fields=link`);
+        if(!r.ok) break;
+        if(page===1) totalPages = parseInt(r.headers.get('X-WP-TotalPages')||'1');
+        const posts = await r.json();
+        if(!Array.isArray(posts)||!posts.length) break;
+        posts.forEach(p=>{ if(p.link) allLinks.push(p.link); });
+        page++;
+      } catch(e){ break; }
+    }
+    setLoad(`${srcTag} : ${allLinks.length} articles trouvés…`, 75);
+
+    // 2. Charger chaque page et extraire le JSON-LD (par batch de 5)
+    for(let i=0; i<allLinks.length; i+=5){
+      const batch = allLinks.slice(i, i+5);
+      await Promise.all(batch.map(async link=>{
+        try {
+          const r = await pGet(link);
+          if(!r.ok) return;
+          const recipe = extractRecipeFromHtml(await r.text(), link, srcTag);
+          if(recipe) results.push(recipe);
+        } catch(e){}
+      }));
+      setLoad(`${srcTag} : ${results.length} recettes…`, 80);
     }
     return results;
   }
-  return [];
+
+  if(site.type === 'blogger-html'){
+    // 1. Récupérer les liens via RSS
+    const allLinks = [];
+    for(let start=1; start<=201; start+=25){
+      try {
+        const r = await pGet(`${base}/feeds/posts/default?alt=rss&max-results=25&start-index=${start}`);
+        if(!r.ok) break;
+        const text = await r.text();
+        const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)]
+          .map(m=>m[1]).filter(l=>l!==base&&l!==base+'/');
+        if(!links.length) break;
+        allLinks.push(...links);
+      } catch(e){ break; }
+    }
+    setLoad(`${srcTag} : ${allLinks.length} articles…`, 75);
+
+    // 2. Charger chaque page
+    for(let i=0; i<allLinks.length; i+=5){
+      const batch = allLinks.slice(i, i+5);
+      await Promise.all(batch.map(async link=>{
+        try {
+          const r = await pGet(link);
+          if(!r.ok) return;
+          const recipe = extractRecipeFromHtml(await r.text(), link, srcTag);
+          if(recipe) results.push(recipe);
+        } catch(e){}
+      }));
+    }
+    return results;
+  }
+
+  return results;
 }
 
 function extractWpRecipe(post, srcTag){
@@ -1745,26 +1824,8 @@ function toggleView(){
 }
 
 function buildCatList(){
-  const counts = {};
-  for(const r of st.allRecipes){
-    for(const c of (r.cats||[])){
-      if(BERG_CATS[c]) counts[c] = (counts[c]||0) + 1;
-    }
-  }
-  const container = document.getElementById('catList');
-  if(!container) return;
-  // Trier par nombre décroissant, ne montrer que ceux avec des recettes
-  const sorted = Object.entries(BERG_CATS)
-    .map(([id,info]) => ({id:+id, ...info, count: counts[+id]||0}))
-    .filter(c => c.count > 0)
-    .sort((a,b) => b.count - a.count);
-  container.innerHTML = sorted.map(c =>
-    `<div class="cat-item" data-cat="${c.id}" onclick="toggleCatFilter(${c.id})">
-      <span>${c.emoji}</span>
-      <span>${c.label}</span>
-      <span class="cat-count">${c.count.toLocaleString('fr')}</span>
-    </div>`
-  ).join('');
+  // Le filtrage par type de plat est géré en interne (COURSE_TYPE_MAP)
+  // L'UI de sélection est supprimée — on n'affiche plus la liste
 }
 
 function toggleCourses(){
