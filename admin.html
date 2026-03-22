@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Menu de la Semaine</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--sage:#7a9e7e;--sage-light:#b5cdb8;--sage-dark:#4a6e50;--cream:#f7f3ec;--warm:#e8dfd0;--earth:#6b4f3a;--ink:#1a1a14;--muted:#8a8478;--white:#fff;--red:#c0392b;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--ink);min-height:100vh;}
+
+/* LOGIN */
+#loginScreen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;}
+.login-card{background:var(--white);border:1px solid var(--warm);border-radius:14px;padding:30px 28px;width:100%;max-width:360px;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+.login-card h1{font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--earth);margin-bottom:4px;}
+.login-card p{font-size:.78rem;color:var(--muted);margin-bottom:20px;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:.72rem;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;}
+.field input{width:100%;font-family:inherit;font-size:.88rem;border:1px solid var(--warm);border-radius:7px;padding:9px 12px;background:var(--cream);color:var(--ink);outline:none;}
+.field input:focus{border-color:var(--sage);}
+.btn-primary{width:100%;padding:10px;background:var(--sage-dark);color:#fff;border:none;border-radius:7px;font-family:inherit;font-size:.88rem;font-weight:500;cursor:pointer;}
+.btn-primary:hover{background:var(--sage);}
+.msg-err{font-size:.76rem;color:var(--red);margin-top:8px;padding:6px 9px;background:#fdf2f2;border-radius:5px;border:1px solid #f5c6c6;}
+
+/* HEADER */
+header{background:var(--sage-dark);color:#fff;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;}
+header h1{font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:400;}
+header h1 span{color:var(--sage-light);font-style:italic;}
+.btn-logout{background:none;border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:5px 11px;color:#fff;cursor:pointer;font-family:inherit;font-size:.78rem;}
+.btn-logout:hover{border-color:#fff;}
+
+/* MAIN */
+.main{max-width:900px;margin:0 auto;padding:22px 18px;}
+.info-box{background:var(--white);border:1px solid var(--warm);border-radius:10px;padding:14px 16px;margin-bottom:18px;font-size:.8rem;color:var(--muted);line-height:1.6;}
+.info-box strong{color:var(--ink);}
+
+/* SOURCE GRID */
+.sources-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:20px;}
+.src-card{background:var(--white);border:1px solid var(--warm);border-radius:10px;padding:13px 14px;}
+.src-card-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.src-icon{font-size:1.2rem;}
+.src-name{font-weight:500;font-size:.88rem;color:var(--ink);}
+.src-meta{font-size:.7rem;color:var(--muted);margin-bottom:10px;min-height:16px;}
+.src-status{display:inline-flex;align-items:center;gap:4px;font-size:.68rem;padding:2px 7px;border-radius:8px;font-weight:500;margin-bottom:8px;}
+.st-ok{background:#e8f5e9;color:#2e7d32;}
+.st-none{background:var(--warm);color:var(--earth);}
+.st-running{background:#fff8e1;color:#f57f17;}
+.st-error{background:#fdf2f2;color:var(--red);}
+.btn-rebuild{width:100%;padding:7px;background:var(--earth);color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.78rem;font-weight:500;cursor:pointer;transition:background .15s;}
+.btn-rebuild:hover{background:#8a6650;}
+.btn-rebuild:disabled{opacity:.45;cursor:default;}
+
+/* LOG */
+.log-wrap{background:var(--white);border:1px solid var(--warm);border-radius:10px;padding:14px 16px;margin-bottom:18px;}
+.log-wrap h2{font-family:'Playfair Display',serif;font-size:.95rem;color:var(--earth);margin-bottom:10px;}
+#logBox{font-family:monospace;font-size:.72rem;background:var(--ink);color:#7fff7f;border-radius:6px;padding:10px 12px;min-height:80px;max-height:320px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;}
+
+/* GLOBAL ACTIONS */
+.actions-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
+.btn-all{padding:9px 18px;background:var(--sage-dark);color:#fff;border:none;border-radius:7px;font-family:inherit;font-size:.84rem;font-weight:500;cursor:pointer;}
+.btn-all:hover{background:var(--sage);}
+.btn-all:disabled{opacity:.45;cursor:default;}
+
+@media(max-width:500px){.sources-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>🔐 Admin <span style="font-family:'Playfair Display',serif;font-style:italic;color:var(--sage-dark)">Menu</span></h1>
+    <p>Accès réservé à l'administration de la base de recettes.</p>
+    <div class="field">
+      <label>Mot de passe</label>
+      <input type="password" id="pwInput" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPw()">
+    </div>
+    <button class="btn-primary" onclick="checkPw()">Entrer</button>
+    <div id="pwErr" style="display:none"></div>
+  </div>
+</div>
+
+<!-- APP (masqué jusqu'à auth) -->
+<div id="adminApp" style="display:none">
+
+<header>
+  <h1>🛠️ Admin — <span>Menu de la Semaine</span></h1>
+  <button class="btn-logout" onclick="logout()">Déconnexion</button>
+</header>
+
+<div class="main">
+
+  <div class="info-box">
+    <strong>Comment ça marche :</strong> Le scraping s'effectue <strong>dans votre navigateur</strong> (comme l'ancienne version).
+    Une fois terminé, les recettes sont envoyées au serveur Netlify pour stockage.
+    Aucun timeout côté serveur. Comptez <strong>2 à 10 minutes</strong> par source selon sa taille.
+  </div>
+
+  <div class="actions-row">
+    <button class="btn-all" id="btnAll" onclick="rebuildAll()">🔄 Tout reconstruire</button>
+  </div>
+
+  <div class="sources-grid" id="sourcesGrid">
+    <div style="color:var(--muted);font-size:.8rem">Chargement du catalogue…</div>
+  </div>
+
+  <div class="log-wrap">
+    <h2>📋 Journal</h2>
+    <div id="logBox">En attente…</div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ── MOT DE PASSE ──────────────────────────────────────────────────
+// Changez cette valeur pour sécuriser l'accès
+const ADMIN_PASSWORD = 'menu-admin-2026';
+
+function checkPw(){
+  const v = document.getElementById('pwInput').value;
+  if(v === ADMIN_PASSWORD){
+    sessionStorage.setItem('adminOk','1');
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('adminApp').style.display='block';
+    initAdmin();
+  } else {
+    const el = document.getElementById('pwErr');
+    el.style.display='block';
+    el.className='msg-err';
+    el.textContent='Mot de passe incorrect.';
+  }
+}
+function logout(){
+  sessionStorage.removeItem('adminOk');
+  location.reload();
+}
+// Rester connecté si refresh
+if(sessionStorage.getItem('adminOk')==='1'){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('adminApp').style.display='block';
+}
+
+// ── CATALOGUE ────────────────────────────────────────────────────
+let catalog = {};
+let busy = false;
+
+async function initAdmin(){
+  log('Chargement du catalogue…');
+  try {
+    const r = await fetch('/.netlify/functions/rebuild-db?action=list');
+    catalog = await r.json();
+    renderGrid();
+    log('Catalogue chargé — ' + Object.keys(catalog).length + ' sources.');
+  } catch(e){ log('❌ Erreur catalogue : ' + e.message); }
+}
+
+function renderGrid(){
+  const grid = document.getElementById('sourcesGrid');
+  grid.innerHTML = Object.entries(catalog).map(([key, src]) => {
+    const age = src.updatedAt ? Math.round((Date.now()-src.updatedAt)/86400000) : null;
+    const ageTxt = age===null ? 'jamais indexé' : age===0 ? "aujourd'hui" : `il y a ${age}j`;
+    const stCls = src.cached ? 'st-ok' : 'st-none';
+    const stTxt = src.cached ? `✅ ${src.count.toLocaleString('fr')} recettes · ${ageTxt}` : '⚠️ Non indexé';
+    return `<div class="src-card" id="card-${key}">
+      <div class="src-card-head">
+        <span class="src-icon">${src.icon||'🌐'}</span>
+        <span class="src-name">${src.name}</span>
+      </div>
+      <div class="src-status ${stCls}" id="st-${key}">${stTxt}</div>
+      <div class="src-meta" id="meta-${key}">${src.url}</div>
+      <button class="btn-rebuild" id="btn-${key}" onclick="rebuildOne('${key}')">↻ Reconstruire</button>
+    </div>`;
+  }).join('');
+}
+
+// ── LOG ──────────────────────────────────────────────────────────
+function log(msg){
+  const box = document.getElementById('logBox');
+  box.textContent += (box.textContent === 'En attente…' ? '' : '\n') + msg;
+  box.textContent = box.textContent.replace('En attente…\n','').replace('En attente…','');
+  box.scrollTop = 99999;
+}
+function logClear(){ document.getElementById('logBox').textContent = ''; }
+
+// ── SCRAPING CÔTÉ CLIENT ─────────────────────────────────────────
+// Proxy CORS via la fonction check-site existante
+async function pGet(url, timeout=20000){
+  const r = await fetch(`/.netlify/functions/check-site?url=${encodeURIComponent(url)}`,
+    {signal: AbortSignal.timeout(timeout)});
+  return r;
+}
+
+function extractRecipeFromHtml(html, pageUrl, srcKey){
+  const blocks = [...html.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
+  for(const block of blocks){
+    try {
+      const d = JSON.parse(block.trim());
+      const items = Array.isArray(d) ? d : (d['@graph'] ? d['@graph'] : [d]);
+      for(const item of items){
+        if(!item || !/Recipe/.test(JSON.stringify(item['@type']||''))) continue;
+        const ings = item.recipeIngredient || [];
+        if(ings.length < 2) continue;
+        const rawSteps = item.recipeInstructions || [];
+        const steps = (Array.isArray(rawSteps)?rawSteps:[rawSteps])
+          .map(s=>typeof s==='object'?(s.text||''):String(s)).filter(s=>s.trim().length>5);
+        const img = item.image;
+        const photo = Array.isArray(img)?img[0]:(img&&typeof img==='object'?img.url:img)||null;
+        const title = (item.name||'').replace(/<[^>]+>/g,'').trim().slice(0,65);
+        if(!title) continue;
+        const timeStr = item.totalTime||item.cookTime||'';
+        const tm = timeStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+        const time = tm?(+(tm[1]||0))*60+(+(tm[2]||0)):0;
+        return {id:pageUrl, src:srcKey, title,
+          photo: photo?String(photo).slice(0,300):null,
+          time, ings:ings.slice(0,12), steps:steps.slice(0,6), cats:[]};
+      }
+    } catch(e){}
+  }
+  return null;
+}
+
+async function scrapeWordpress(key, src){
+  const base = src.url;
+  const allLinks = [];
+  let page=1, totalPages=1;
+  while(page <= Math.min(totalPages, 20)){
+    try {
+      const r = await pGet(`${base}/wp-json/wp/v2/posts?per_page=50&page=${page}&_fields=link`);
+      if(!r.ok) break;
+      if(page===1) totalPages = parseInt(r.headers.get('X-WP-TotalPages')||'1');
+      const posts = await r.json();
+      if(!Array.isArray(posts)||!posts.length) break;
+      posts.forEach(p=>{if(p.link)allLinks.push(p.link);});
+      page++;
+    } catch(e){ break; }
+  }
+  log(`  → ${allLinks.length} articles trouvés`);
+  const results = [];
+  for(let i=0; i<allLinks.length; i+=5){
+    const batch = allLinks.slice(i,i+5);
+    await Promise.all(batch.map(async link=>{
+      try {
+        const r = await pGet(link, 15000);
+        if(!r.ok) return;
+        const recipe = extractRecipeFromHtml(await r.text(), link, key);
+        if(recipe) results.push(recipe);
+      } catch(e){}
+    }));
+    if(i%50===0 && i>0) log(`  → ${results.length} recettes extraites…`);
+    // Petite pause pour ne pas surcharger
+    await new Promise(r=>setTimeout(r,100));
+  }
+  return results;
+}
+
+async function scrapeBlogger(key, src){
+  const base = src.url;
+  const allLinks = [];
+  for(let start=1; start<=500; start+=25){
+    try {
+      const r = await pGet(`${base}/feeds/posts/default?alt=rss&max-results=25&start-index=${start}`);
+      if(!r.ok) break;
+      const text = await r.text();
+      const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)]
+        .map(m=>m[1]).filter(l=>l!==base&&l!==base+'/');
+      if(!links.length) break;
+      allLinks.push(...links);
+      if(allLinks.length>=500) break;
+    } catch(e){ break; }
+  }
+  log(`  → ${allLinks.length} articles trouvés`);
+  const results = [];
+  for(let i=0; i<allLinks.length; i+=5){
+    await Promise.all(allLinks.slice(i,i+5).map(async link=>{
+      try {
+        const r = await pGet(link, 15000);
+        if(!r.ok) return;
+        const recipe = extractRecipeFromHtml(await r.text(), link, key);
+        if(recipe) results.push(recipe);
+      } catch(e){}
+    }));
+    await new Promise(r=>setTimeout(r,100));
+  }
+  return results;
+}
+
+async function scrapeSitemap(key, src){
+  const allLinks = [];
+  const max = src.maxRecipes || 99999;
+  for(const smUrl of (src.sitemaps||[])){
+    try {
+      const r = await pGet(smUrl, 20000);
+      if(!r.ok) continue;
+      const text = await r.text();
+      const urls = [...text.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)].map(m=>m[1]);
+      allLinks.push(...urls);
+      if(allLinks.length>=max) break;
+    } catch(e){ continue; }
+  }
+  const limited = allLinks.slice(0,max);
+  log(`  → ${limited.length} URLs en sitemap`);
+  const results = [];
+  for(let i=0; i<limited.length; i+=8){
+    await Promise.all(limited.slice(i,i+8).map(async link=>{
+      try {
+        const r = await pGet(link, 12000);
+        if(!r.ok) return;
+        const recipe = extractRecipeFromHtml(await r.text(), link, key);
+        if(recipe) results.push(recipe);
+      } catch(e){}
+    }));
+    if(i%100===0 && i>0) log(`  → ${results.length} recettes extraites…`);
+    await new Promise(r=>setTimeout(r,80));
+  }
+  return results;
+}
+
+// ── ENREGISTREMENT DANS LES BLOBS ───────────────────────────────
+async function saveToBlobs(key, recipes){
+  const r = await fetch(`/.netlify/functions/rebuild-db?action=save&source=${key}`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({recipes}),
+  });
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return await r.json();
+}
+
+// ── REBUILD UNE SOURCE ───────────────────────────────────────────
+async function rebuildOne(key){
+  if(busy){ log('⚠️ Une reconstruction est déjà en cours.'); return; }
+  busy = true;
+  setAllBtns(true);
+  setCardStatus(key, 'running', '⏳ En cours…');
+
+  const src = catalog[key];
+  log(`\n🔄 ${src.name} (${src.type})…`);
+
+  try {
+    let recipes = [];
+    if(src.type==='wordpress')      recipes = await scrapeWordpress(key, src);
+    else if(src.type==='blogger')   recipes = await scrapeBlogger(key, src);
+    else if(src.type==='sitemap')   recipes = await scrapeSitemap(key, src);
+
+    log(`  → ${recipes.length} recettes scrapées, envoi au serveur…`);
+    const res = await saveToBlobs(key, recipes);
+    log(`  ✅ ${src.name} : ${res.count} recettes sauvegardées.`);
+    setCardStatus(key, 'ok', `✅ ${res.count.toLocaleString('fr')} recettes · aujourd'hui`);
+    catalog[key] = {...catalog[key], cached:true, count:res.count, updatedAt:Date.now()};
+  } catch(e){
+    log(`  ❌ Erreur : ${e.message}`);
+    setCardStatus(key, 'error', `❌ Erreur : ${e.message.slice(0,50)}`);
+  }
+
+  busy = false;
+  setAllBtns(false);
+}
+
+// ── REBUILD TOUT ─────────────────────────────────────────────────
+async function rebuildAll(){
+  if(busy){ log('⚠️ Une reconstruction est déjà en cours.'); return; }
+  logClear();
+  log('🚀 Reconstruction complète démarrée…');
+  const keys = Object.keys(catalog);
+  for(const key of keys){
+    await rebuildOne(key);
+  }
+  log('\n🎉 Toutes les sources ont été traitées.');
+}
+
+// ── HELPERS UI ───────────────────────────────────────────────────
+function setAllBtns(disabled){
+  document.querySelectorAll('.btn-rebuild').forEach(b=>b.disabled=disabled);
+  document.getElementById('btnAll').disabled = disabled;
+}
+function setCardStatus(key, type, txt){
+  const el = document.getElementById('st-'+key);
+  if(!el) return;
+  el.className = 'src-status ' + {ok:'st-ok',running:'st-running',error:'st-error',none:'st-none'}[type];
+  el.textContent = txt;
+}
+
+// Init si déjà connecté
+if(sessionStorage.getItem('adminOk')==='1') initAdmin();
+</script>
+</body>
+</html>

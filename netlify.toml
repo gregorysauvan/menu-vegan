@@ -7,3 +7,10 @@
 
 [build.environment]
   NODE_VERSION = "18"
+
+# Double protection : mot de passe HTTP sur /admin.html
+# (en plus du mot de passe JS dans la page)
+[[headers]]
+  for = "/admin.html"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"

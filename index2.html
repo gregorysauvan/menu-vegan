@@ -209,8 +209,7 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .badge-healthy{background:#e3f2fd;color:#0d47a1;}
 .badge-bio{background:#f1f8e9;color:#33691e;}
 .badge-general{background:var(--warm);color:var(--earth);}
-.rebuild-log{font-size:.69rem;font-family:monospace;background:var(--ink);color:#7fff7f;border-radius:5px;padding:8px 10px;max-height:120px;overflow-y:auto;margin-top:8px;display:none;}
-.rebuild-log.on{display:block;}
+
 @media(max-width:900px){:root{--sidebar-w:200px;}.input-zones{grid-template-columns:1fr;}}
 @media(max-width:640px){
   .sidebar{display:none;position:fixed;top:0;left:0;bottom:0;z-index:200;width:270px;box-shadow:3px 0 20px rgba(0,0,0,.15);height:100vh;}
@@ -426,19 +425,11 @@ header h1 span{color:var(--sage-light);font-style:italic;}
           <div style="font-size:.75rem;color:var(--muted)">Chargement du catalogue…</div>
         </div>
         <button class="btn-save-reload" onclick="saveAndReload()">✅ Appliquer la sélection</button>
-      </div>
-      <div class="set-sec" style="border:1px dashed var(--warm)">
-        <h3>🛠️ Administration</h3>
-        <p class="sub">Reconstruit la base côté serveur source par source (séquentiel, évite les timeouts).</p>
-        <div id="rebuildStatus" style="font-size:.75rem;color:var(--muted);margin-bottom:8px"></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn-check" onclick="rebuildAll()" style="background:var(--earth)">🔄 Tout reconstruire</button>
-          <select id="rebuildSourceSel" style="font-family:inherit;font-size:.78rem;border:1px solid var(--warm);border-radius:6px;padding:5px 8px;background:var(--cream)">
-            <option value="">— Source unique —</option>
-          </select>
-          <button class="btn-check" onclick="rebuildOne()" style="background:var(--sage-dark)">↻ Reconstruire</button>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--warm);font-size:.72rem;color:var(--muted)">
+          🛠️ Pour reconstruire la base : <a href="/admin.html" target="_blank" style="color:var(--sage-dark);font-weight:500">ouvrir l'admin →</a>
         </div>
       </div>
+
     </div>
   </div>
 </div>
@@ -684,54 +675,10 @@ init();
 
 /* ── CATALOGUE DES SOURCES ── */
 let sourceCatalogData={};
-async function loadSourceCatalog(){try{const r=await fetch('/.netlify/functions/rebuild-db?action=list');if(!r.ok)return;sourceCatalogData=await r.json();renderSourceCatalog();renderRebuildSelect();}catch(e){console.warn('Catalog:',e);}}
-function renderSourceCatalog(){const el=document.getElementById('sourceCatalog');if(!el)return;const BADGES={vegan:'badge-vegan',healthy:'badge-healthy',bio:'badge-bio',general:'badge-general'};const LABELS={vegan:'Vegan',healthy:'Healthy',bio:'Bio',general:'Général'};el.innerHTML=Object.entries(sourceCatalogData).map(([key,src])=>{const active=(st.activeSources||[]).includes(key);const age=src.updatedAt?Math.round((Date.now()-src.updatedAt)/86400000):null;const ageTxt=age===null?'⚠️ non indexé':age===0?"aujourd'hui":`il y a ${age}j`;const badge=BADGES[src.specialty]||'badge-general';const label=LABELS[src.specialty]||src.specialty;return `<div class="source-item${active?' active':''}" data-src="${key}" onclick="toggleSource('${key}')"><span class="source-icon">${src.icon||'🌐'}</span><div class="source-info"><div class="source-name">${src.name}</div><div class="source-meta">${src.cached?src.count.toLocaleString('fr')+' recettes · '+ageTxt:'⚠️ pas encore indexé — cliquer Reconstruire'}</div></div><span class="source-badge ${badge}">${label}</span><div class="source-toggle"></div></div>`;}).join('');}
-function renderRebuildSelect(){const sel=document.getElementById('rebuildSourceSel');if(!sel)return;sel.innerHTML='<option value="">— Source unique —</option>'+Object.entries(sourceCatalogData).map(([k,s])=>`<option value="${k}">${s.icon||''} ${s.name}</option>`).join('');}
+async function loadSourceCatalog(){try{const r=await fetch('/.netlify/functions/rebuild-db?action=list');if(!r.ok)return;sourceCatalogData=await r.json();renderSourceCatalog();}catch(e){console.warn('Catalog:',e);}}
+function renderSourceCatalog(){const el=document.getElementById('sourceCatalog');if(!el)return;const BADGES={vegan:'badge-vegan',healthy:'badge-healthy',bio:'badge-bio',general:'badge-general'};const LABELS={vegan:'Vegan',healthy:'Healthy',bio:'Bio',general:'Général'};el.innerHTML=Object.entries(sourceCatalogData).map(([key,src])=>{const active=(st.activeSources||[]).includes(key);const age=src.updatedAt?Math.round((Date.now()-src.updatedAt)/86400000):null;const ageTxt=age===null?'⚠️ non indexé':age===0?"aujourd'hui":`il y a ${age}j`;const badge=BADGES[src.specialty]||'badge-general';const label=LABELS[src.specialty]||src.specialty;return `<div class="source-item${active?' active':''}" data-src="${key}" onclick="toggleSource('${key}')"><span class="source-icon">${src.icon||'🌐'}</span><div class="source-info"><div class="source-name">${src.name}</div><div class="source-meta">${src.cached?src.count.toLocaleString('fr')+' recettes · '+ageTxt:'⚠️ pas encore indexé'}</div></div><span class="source-badge ${badge}">${label}</span><div class="source-toggle"></div></div>`;}).join('');}
 function toggleSource(key){if(!st.activeSources)st.activeSources=[];const idx=st.activeSources.indexOf(key);if(idx>=0)st.activeSources.splice(idx,1);else st.activeSources.push(key);renderSourceCatalog();saveCfg();}
-async function rebuildAll(){await doRebuild(null);}
-async function rebuildOne(){const key=document.getElementById('rebuildSourceSel')?.value;if(!key){alert('Sélectionnez une source');return;}await doRebuild(key);}
 
-/* ════════════════════════════════════════
-   RECONSTRUCTION SÉQUENTIELLE
-   ════════════════════════════════════════ */
-async function doRebuild(sourceKey) {
-  const logEl = document.getElementById('rebuildStatus');
-  const oldBox = logEl.parentNode.querySelector('.rebuild-log');
-  if (oldBox) oldBox.remove();
-  const logBox = document.createElement('div');
-  logBox.className = 'rebuild-log on';
-  logEl.parentNode.insertBefore(logBox, logEl.nextSibling);
-  logEl.textContent = '';
-
-  const addLog = (msg) => { logBox.textContent += msg + '\n'; logBox.scrollTop = 99999; };
-
-  const sources = sourceKey ? [sourceKey] : Object.keys(sourceCatalogData);
-  addLog(`⏳ ${sources.length} source(s) à reconstruire…`);
-
-  let ok = 0, err = 0;
-  for (const key of sources) {
-    const name = sourceCatalogData[key]?.name || key;
-    addLog(`\n🔄 ${name}…`);
-    try {
-      const r = await fetch(
-        `/.netlify/functions/rebuild-db?action=rebuild&source=${key}`,
-        { method: 'POST', signal: AbortSignal.timeout(24000) }
-      );
-      const data = await r.json();
-      (data.log || []).forEach(l => addLog(l));
-      ok++;
-    } catch (e) {
-      addLog(`❌ Erreur : ${e.message}`);
-      err++;
-    }
-  }
-
-  logEl.textContent = err === 0
-    ? `✅ Terminé (${ok} source(s))`
-    : `⚠️ ${ok} OK · ${err} erreur(s)`;
-  await loadSourceCatalog();
-  Object.keys(localStorage).filter(k => k.startsWith('blobSrc')).forEach(k => localStorage.removeItem(k));
-}
 </script>
 </body>
 </html>
