@@ -186,10 +186,22 @@ function logClear(){ document.getElementById('logBox').textContent = ''; }
 
 // ── SCRAPING CÔTÉ CLIENT ─────────────────────────────────────────
 // Proxy CORS via la fonction check-site existante
-async function pGet(url, timeout=20000){
-  const r = await fetch(`/.netlify/functions/check-site?url=${encodeURIComponent(url)}`,
-    {signal: AbortSignal.timeout(timeout)});
+// Fetch direct depuis le navigateur — pas de CORS sur les sites publics
+// Plus fiable que check-site qui pouvait tronquer les pages
+async function pGetDirect(url, timeout=20000){
+  const r = await fetch(url, {
+    signal: AbortSignal.timeout(timeout),
+    headers: {
+      'Accept': 'text/html,application/xhtml+xml,application/xml,application/json,*/*',
+      'Accept-Language': 'fr-FR,fr;q=0.9',
+    }
+  });
   return r;
+}
+
+// Alias — tout passe maintenant en direct
+async function pGet(url, timeout=20000){
+  return pGetDirect(url, timeout);
 }
 
 // ── MAPPING CATÉGORIES WORDPRESS → CATS INTERNES ─────────────────
@@ -197,7 +209,7 @@ async function pGet(url, timeout=20000){
 async function fetchWpCategoryMap(base) {
   const map = {}; // wpCatId → [cats internes]
   try {
-    const r = await pGet(`${base}/wp-json/wp/v2/categories?per_page=100&_fields=id,slug,name`);
+    const r = await pGetDirect(`${base}/wp-json/wp/v2/categories?per_page=100&_fields=id,slug,name`);
     if (!r.ok) return map;
     const cats = await r.json();
     for (const cat of cats) {
@@ -331,6 +343,54 @@ function extractRecipeFromHtml(html, pageUrl, srcKey, wpCats=[], catMap={}){
       }
     } catch(e){}
   }
+  // Fallback 2 : Plugin solopine-recipe (lafeestephanie)
+  if(html.includes('sp-recipe') || html.includes('solopine-recipe')) {
+    try {
+      const spIdx = html.indexOf('class="sp-recipe"');
+      const bloc = spIdx >= 0 ? html.slice(spIdx, spIdx + 12000) : html;
+
+      // Titre
+      const titleM = bloc.match(/<h2[^>]*>([^<]+)<\/h2>/);
+      const title = titleM ? titleM[1].replace(/&#039;/g,"'").replace(/&#8217;/g,"'").replace(/<[^>]+>/g,'').trim().slice(0,65) : '';
+      if(!title) return null;
+
+      // Photo
+      const photoM = bloc.match(/class="recipe-image[^"]*"[\s\S]*?src="([^"]+)"/);
+      const photo = photoM ? photoM[1] : null;
+
+      // Temps
+      const timeM = bloc.match(/(\d+)\s*min/i);
+      const time = timeM ? parseInt(timeM[1]) : 0;
+
+      // Ingrédients
+      const ingIdx = bloc.indexOf('recipe-ingredients');
+      const ingBloc = ingIdx >= 0 ? bloc.slice(ingIdx, ingIdx + 3000) : '';
+      const ings = [...ingBloc.matchAll(/<li[^>]*><span>([^<]+)<\/span><\/li>/g)]
+        .map(m => m[1].replace(/&#039;/g,"'").trim())
+        .filter(s => s.length > 1)
+        .slice(0, 12);
+      if(ings.length < 2) return null;
+
+      // Étapes
+      const stepBloc = bloc.slice(bloc.indexOf('recipe-method'));
+      const steps = [...stepBloc.matchAll(/<div class="step-content">\s*<p>([\s\S]*?)<\/p>/g)]
+        .map(m => m[1].replace(/<[^>]+>/g,'').trim())
+        .filter(s => s.length > 5)
+        .slice(0, 6);
+
+      const cats = guessCats(title, ings, '', '');
+      // Utiliser wpCats si disponibles
+      if(wpCats.length && Object.keys(catMap).length) {
+        const wpMapped = wpCats.flatMap(id => catMap[id]||[]);
+        if(wpMapped.length) cats.splice(0, cats.length, ...new Set(wpMapped));
+      }
+
+      return {id:pageUrl, src:srcKey, title,
+        photo: photo ? photo.slice(0,300) : null,
+        time, ings, steps, cats: guessCats(title, ings, '', '')};
+    } catch(e) {}
+  }
+
   return null;
 }
 
@@ -350,7 +410,7 @@ async function scrapeWordpress(key, src){
   let page=1, totalPages=1;
   while(page <= Math.min(totalPages, 20)){
     try {
-      const r = await pGet(`${base}/wp-json/wp/v2/posts?per_page=50&page=${page}&_fields=link,categories`);
+      const r = await pGetDirect(`${base}/wp-json/wp/v2/posts?per_page=50&page=${page}&_fields=link,categories`);
       if(!r.ok) break;
       if(page===1) totalPages = parseInt(r.headers.get('X-WP-TotalPages')||'1');
       const posts = await r.json();
@@ -381,11 +441,16 @@ async function scrapeWordpress(key, src){
 async function scrapeBlogger(key, src){
   const base = src.url;
   const allLinks = [];
+
+  // Essayer Blogger d'abord
+  let isBlogger = false;
   for(let start=1; start<=500; start+=25){
     try {
-      const r = await pGet(`${base}/feeds/posts/default?alt=rss&max-results=25&start-index=${start}`);
+      const r = await pGetDirect(`${base}/feeds/posts/default?alt=rss&max-results=25&start-index=${start}`);
       if(!r.ok) break;
       const text = await r.text();
+      if(!text.includes('<rss') && !text.includes('<feed')) break;
+      isBlogger = true;
       const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)]
         .map(m=>m[1]).filter(l=>l!==base&&l!==base+'/');
       if(!links.length) break;
@@ -393,6 +458,25 @@ async function scrapeBlogger(key, src){
       if(allLinks.length>=500) break;
     } catch(e){ break; }
   }
+
+  // Fallback : essayer le flux RSS WordPress standard (/feed/)
+  if(!isBlogger || !allLinks.length) {
+    log(`  → Blogger non disponible, essai RSS WP…`);
+    try {
+      // Paginer via ?paged=N
+      for(let page=1; page<=20; page++){
+        const r = await pGetDirect(`${base}/feed/?paged=${page}`);
+        if(!r.ok) break;
+        const text = await r.text();
+        const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)]
+          .map(m=>m[1]).filter(l=>l!==base&&l!==base+'/'&&!l.includes('?feed')&&!l.includes('comments'));
+        if(!links.length) break;
+        allLinks.push(...links);
+        if(allLinks.length >= 500) break;
+      }
+    } catch(e){}
+  }
+
   log(`  → ${allLinks.length} articles trouvés`);
   const results = [];
   for(let i=0; i<allLinks.length; i+=5){
@@ -415,12 +499,18 @@ async function scrapeSitemap(key, src){
   for(const smUrl of (src.sitemaps||[])){
     try {
       const r = await pGet(smUrl, 20000);
-      if(!r.ok) continue;
+      if(!r.ok){
+        log(`  ⚠️ Sitemap inaccessible (HTTP ${r.status}) : ${smUrl}`);
+        continue;
+      }
       const text = await r.text();
       const urls = [...text.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)].map(m=>m[1]);
       allLinks.push(...urls);
       if(allLinks.length>=max) break;
-    } catch(e){ continue; }
+    } catch(e){
+      log(`  ⚠️ Erreur sitemap : ${e.message}`);
+      continue;
+    }
   }
   const limited = allLinks.slice(0,max);
   log(`  → ${limited.length} URLs en sitemap`);

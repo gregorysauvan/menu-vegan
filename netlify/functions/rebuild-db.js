@@ -9,10 +9,8 @@ const SOURCES = {
   'saveursbio':         { name: 'Saveurs Bio',            url: 'https://www.saveurs-bio.fr',        type: 'wordpress', specialty: 'bio',     icon: '🌿' },
   'barbarafrenchvegan': { name: 'Barbara French Vegan',   url: 'https://barbarafrenchvegan.com',    type: 'wordpress', specialty: 'vegan',   icon: '🌸' },
   'iletaituneveggie':   { name: 'Il était une veggie',    url: 'https://iletaituneveggie.com',      type: 'wordpress', specialty: 'vegan',   icon: '🥦' },
-  'papillesetpupilles': {
-    name: 'Papilles et Pupilles', url: 'https://www.papillesetpupilles.fr', type: 'sitemap', specialty: 'general', icon: '👅',
-    sitemaps: ['https://www.papillesetpupilles.fr/post-sitemap.xml','https://www.papillesetpupilles.fr/post-sitemap2.xml','https://www.papillesetpupilles.fr/post-sitemap3.xml'],
-  },
+  // papillesetpupilles : bloque API WP et sitemaps → désactivé
+  // 'papillesetpupilles': { name: 'Papilles et Pupilles', ... },
   'ptitchef': {
     name: 'Ptitchef', url: 'https://www.ptitchef.com', type: 'sitemap', specialty: 'general', icon: '👨‍🍳', maxRecipes: 3000,
     sitemaps: ['https://www.ptitchef.com/upload_data/sitemaps/recipe-fr-1.xml'],

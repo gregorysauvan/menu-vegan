@@ -63,8 +63,7 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .pool-info-box{background:var(--cream);border-radius:7px;padding:8px 10px;font-size:.71rem;color:var(--muted);line-height:1.4;}
 .pool-count{font-size:1.1rem;font-weight:700;color:var(--sage-dark);display:block;line-height:1;}
 .sidebar-ctas{display:flex;flex-direction:column;gap:6px;margin-top:auto;padding-top:14px;border-top:1px solid var(--warm);}
-.btn-gen{padding:10px;background:var(--sage-dark);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:.88rem;font-weight:500;cursor:pointer;touch-action:manipulation;transition:background .2s;text-align:center;}
-.btn-gen:hover,.btn-gen:active{background:var(--sage);}
+
 .btn-crs{padding:9px;background:var(--cream);color:var(--earth);border:1px solid var(--warm);border-radius:8px;font-family:inherit;font-size:.84rem;cursor:pointer;touch-action:manipulation;transition:background .15s;text-align:center;}
 .btn-crs:hover{background:var(--warm);}
 .btn-print{padding:7px;background:none;color:var(--muted);border:1px solid var(--warm);border-radius:7px;font-family:inherit;font-size:.78rem;cursor:pointer;touch-action:manipulation;text-align:center;}
@@ -230,12 +229,22 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 @media(max-width:440px){#grid[style*="repeat"]{grid-template-columns:1fr!important;}}
 @media print{header,.sidebar,.settings-overlay,#cookieBanner,.btn-swap,.overlay{display:none!important;}.layout{display:block;}.main-content{padding:0;}.courses{display:block!important;}.card{break-inside:avoid;}}
 
-/* ── BOUTON GÉNÉRER INLINE ── */
-.btn-gen-inline{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px 20px;background:var(--sage-dark);color:#fff;border:none;border-radius:10px;font-family:inherit;font-size:1rem;font-weight:600;cursor:pointer;touch-action:manipulation;transition:background .2s,transform .1s;margin-bottom:14px;box-shadow:0 2px 8px rgba(74,110,80,.25);}
-.btn-gen-inline:hover{background:var(--sage);transform:translateY(-1px);}
-.btn-gen-inline:active{transform:translateY(0);}
-.btn-gen-inline .btn-gen-icon{font-size:1.2rem;}
-@media(max-width:640px){.btn-gen-inline{padding:12px 16px;font-size:.92rem;}}
+/* ── BOUTON GÉNÉRER DANS REPAS-BAR ── */
+.btn-gen-bar{padding:8px 16px;background:var(--sage-dark);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:.84rem;font-weight:600;cursor:pointer;touch-action:manipulation;transition:background .15s;white-space:nowrap;margin-left:auto;}
+.btn-gen-bar:hover{background:var(--sage);}
+.btn-gen-bar[style*='earth']:hover{background:var(--clay)!important;}
+@media(max-width:640px){.btn-gen-bar{padding:7px 12px;font-size:.78rem;}}
+
+/* ── SOIRÉE ── */
+.btn-soiree{padding:4px 10px;border-radius:16px;font-size:.74rem;font-weight:500;cursor:pointer;border:1.5px solid #9c27b0;background:var(--cream);color:#9c27b0;font-family:inherit;touch-action:manipulation;transition:all .15s;}
+.btn-soiree.on{background:#9c27b0;color:#fff;}
+.btn-soiree:hover{border-color:#7b1fa2;}
+
+/* ── STRUCTURE PAR JOUR ── */
+.day-struct{display:flex;gap:3px;margin-top:5px;flex-wrap:wrap;}
+.day-struct-btn{padding:2px 7px;border-radius:10px;font-size:.62rem;font-weight:500;cursor:pointer;border:1px solid var(--warm);background:var(--cream);color:var(--muted);font-family:inherit;touch-action:manipulation;transition:all .12s;}
+.day-struct-btn.on{background:var(--sage-dark);color:#fff;border-color:var(--sage-dark);}
+.day-struct-btn.soiree-on{background:#9c27b0;color:#fff;border-color:#9c27b0;}
 </style>
 </head>
 <body>
@@ -367,7 +376,6 @@ header h1 span{color:var(--sage-light);font-style:italic;}
         <div class="pool-info-box" id="poolInfo"><span class="pool-count" id="poolCount">—</span> recettes disponibles</div>
       </div>
       <div class="sidebar-ctas">
-        <button class="btn-gen" onclick="generate();closeSidebar()">🎲 Générer le menu</button>
         <button class="btn-crs" onclick="toggleCourses()">🛒 Liste de courses</button>
         <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>
       </div>
@@ -401,11 +409,10 @@ header h1 span{color:var(--sage-light);font-style:italic;}
           <button class="tgl-btn active" data-ct="dessert" onclick="toggleCourseType('dessert')">🍰 Dessert</button>
         </div>
       </div>
+      <button class="btn-soiree" id="btnSoiree" onclick="addSoireeDay()" title="Ajouter un jour Soirée">🥂 + Soirée</button>
+      <button class="btn-gen-bar" onclick="generate()">🎲 Générer</button>
+      <button class="btn-gen-bar" onclick="exportMenu()" style="background:var(--earth)" title="Exporter le menu en texte">📤</button>
     </div>
-    <button class="btn-gen-inline" onclick="generate()">
-      <span class="btn-gen-icon">🎲</span>
-      Générer le menu
-    </button>
     <div class="grid" id="grid">
       <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);font-style:italic">Configurez vos filtres et cliquez sur « Générer » ✨</div>
     </div>
@@ -427,6 +434,19 @@ header h1 span{color:var(--sage-light);font-style:italic;}
   <div class="settings-panel">
     <div class="set-hdr"><h2>⚙️ Configuration</h2><button class="set-close" onclick="closeSettings()">✕</button></div>
     <div class="set-body">
+      <div class="set-sec">
+        <h3>📅 Premier jour de la semaine</h3>
+        <p class="sub">Les noms des jours dans le menu</p>
+        <div class="toggle-group" style="flex-wrap:wrap;gap:4px" id="firstDayGroup">
+          <button class="tgl-btn active" data-fd="1" onclick="setFirstDay(1)">Lun</button>
+          <button class="tgl-btn" data-fd="2" onclick="setFirstDay(2)">Mar</button>
+          <button class="tgl-btn" data-fd="3" onclick="setFirstDay(3)">Mer</button>
+          <button class="tgl-btn" data-fd="4" onclick="setFirstDay(4)">Jeu</button>
+          <button class="tgl-btn" data-fd="5" onclick="setFirstDay(5)">Ven</button>
+          <button class="tgl-btn" data-fd="6" onclick="setFirstDay(6)">Sam</button>
+          <button class="tgl-btn" data-fd="7" onclick="setFirstDay(7)">Dim</button>
+        </div>
+      </div>
       <div class="set-sec">
         <h3>🔐 Compte Bergamot</h3>
         <p class="sub">Vos recettes personnelles — liées à votre compte</p>
@@ -459,15 +479,23 @@ const DIET_FILTERS={
 };
 const SNACK_MOMENTS=new Set(['petitdej','gouter']);
 const COURSE_TYPE_MAP={entree:[8602,15947,8610,31409],plat:[8603,16929,15982,35459,35460],dessert:[8604,8606,8608]};
+// Soirée : apéro (8610) + entrée + plat + dessert
+const SOIREE_SERVICES=['apero','entree','plat','dessert'];
+COURSE_TYPE_MAP['apero']=[8610,8602,15947]; // apéritif = cat 8610 + entrée légère
 const EXCLUDED_CATS=[12689,13569,29062,34519,55286,55447,79337];
 // Mots-clés titre qui signalent une boisson/jus → jamais en plat/entrée
 const DRINK_KW=['jus ','smoothie','jus de','détox','detox','latte','infusion','boisson','sirop','limonade','kombucha','shake','milkshake','lassi','thé ','café ','tisane'];
 const PLAT_EXCLUDED=[8607,8608,8604,8606];
 COURSE_TYPE_MAP['snack']=[8608];
-const COURSE_LABELS={entree:'Entrée',plat:'Plat',dessert:'Dessert',snack:'Recette'};
+const COURSE_LABELS={entree:'Entrée',plat:'Plat',dessert:'Dessert',snack:'Recette',apero:'Apéro'};
 const MOMENT_LABELS={petitdej:'🌅 Petit-déj',dejeuner:'🌞 Déjeuner',gouter:'🌤️ Goûter',diner:'🌙 Dîner'};
-const COURSE_COLORS={entree:'#e8f5e9|#2e7d32',plat:'#e3f2fd|#1565c0',dessert:'#fce4ec|#880e4f',snack:'#fff8e1|#f57f17'};
-const DAY_NAMES=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche','Lundi +','Mardi +'];
+const COURSE_COLORS={entree:'#e8f5e9|#2e7d32',plat:'#e3f2fd|#1565c0',dessert:'#fce4ec|#880e4f',snack:'#fff8e1|#f57f17',apero:'#f3e5f5|#7b1fa2'};
+const ALL_DAYS=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+function getDayNames(){
+  const N=st.firstDay||1; // 1=Lun,2=Mar,...,7=Dim
+  const base=[...ALL_DAYS.slice(N-1),...ALL_DAYS.slice(0,N-1)];
+  return [...base,...base.map(d=>d+' +')];
+}
 const SEASON_VEG={
   p:['asperge','poireau','petits pois','épinard','fève','radis','artichaut','cresson','navet','blette','brocoli'],
   s:['courgette','tomate','aubergine','poivron','concombre','haricot vert','maïs','fenouil','betterave','basilic','menthe'],
@@ -488,7 +516,7 @@ const PROT_KW=['tofu','tempeh','seitan','lentille','pois chiche','haricot','soja
 const PROT_TIPS={pa:["Ajouter 150g de tofu sauté","Servir avec des lentilles"],gr:["Émietter du tofu fumé","Ajouter des pois chiches"],sa:["Ajouter du tofu mariné","Parsemer d'edamame"],so:["Ajouter des lentilles corail","Incorporer des haricots blancs"],ri:["Servir avec du tempeh grillé","Parsemer d'edamame"],co:["Ajouter des pois chiches rôtis","Incorporer des lentilles"],mi:["Ajouter du seitan","Incorporer des lentilles"],as:["Ajouter du tofu croustillant","Incorporer du tempeh mariné"],pi:["Ajouter du tofu émietté","Incorporer des pois chiches"],bu:["Steak de tofu","Galette de pois chiches"],x:["Ajouter 150g de tofu ferme","Servir avec des pois chiches rôtis"]};
 const SB_INFO={p:{c:'sb-p',i:'🌸'},s:{c:'sb-s',i:'☀️'},a:{c:'sb-a',i:'🍂'},w:{c:'sb-w',i:'❄️'}};
 const SC={spring:'p',summer:'s',autumn:'a',winter:'w'};
-const st={allRecipes:[],pool:[],menu:[],ideas:[],stock:[],season:'all',strict:false,prot:false,courses:false,bergPriority:false,diets:new Set(),catFilter:new Set(),activeSources:[],mealTypes:new Set(['dejeuner','diner']),courseTypes:new Set(['entree','plat','dessert']),viewMode:'agenda',token:null,sites:[]};
+const st={allRecipes:[],pool:[],menu:[],ideas:[],stock:[],season:'all',strict:false,prot:false,courses:false,bergPriority:false,diets:new Set(),catFilter:new Set(),activeSources:[],mealTypes:new Set(['dejeuner','diner']),courseTypes:new Set(['entree','plat','dessert']),viewMode:'agenda',token:null,sites:[],soireeDays:new Set(),dayStructures:{},firstDay:1};
 
 function loadCfg(){try{const raw=localStorage.getItem(CFG_KEY)||getCookie(CFG_KEY);if(raw)return JSON.parse(raw);}catch{}return null;}
 function saveCfg(){const d={token:st.token,sites:st.sites,activeSources:st.activeSources};const json=JSON.stringify(d);try{localStorage.setItem(CFG_KEY,json);}catch{}if(getCookie('menuCookieOk')==='1')setCookie(CFG_KEY,json,365);}
@@ -517,6 +545,174 @@ function passesFilter(r){
 function applyDietFilters(){st.pool=st.allRecipes.filter(r=>passesFilter(r));updatePoolInfo();}
 function toggleDiet(diet){if(st.diets.has(diet))st.diets.delete(diet);else st.diets.add(diet);document.querySelectorAll('.diet-item').forEach(el=>{el.classList.toggle('active',st.diets.has(el.getAttribute('data-diet')));});applyDietFilters();}
 function updatePoolInfo(){const cnt=document.getElementById('poolCount');const box=document.getElementById('poolInfo');if(cnt)cnt.textContent=st.pool.length.toLocaleString('fr');if(box)box.style.borderLeft=(st.diets.size&&st.pool.length<st.allRecipes.length)?'3px solid var(--sage-dark)':'';}
+
+/* ── SOIRÉE ── */
+function addSoireeDay(){
+  // Ajouter un jour soirée à la fin du menu actuel (ou prépare pour la prochaine génération)
+  const N = parseInt(document.getElementById('mealCount').value)||6;
+  const dayIdx = N; // index du jour soirée = après les jours normaux
+  st.soireeDays.add(dayIdx);
+  // Incrémenter le compteur de jours
+  const newN = N + 1;
+  document.getElementById('repasVal').textContent = newN;
+  document.getElementById('mealCount').value = newN;
+  if(st.menu.length) generate(); // regénérer si un menu existe déjà
+}
+
+function isSoireeDay(dayIdx){ return st.soireeDays.has(dayIdx); }
+
+// Structure d'un jour : quels services sont actifs (entree, plat, dessert)
+// Par défaut : suit st.courseTypes
+function getDayServices(dayIdx){
+  if(isSoireeDay(dayIdx)) return ['apero','entree','plat','dessert'];
+  const custom = st.dayStructures[dayIdx];
+  if(custom) return custom;
+  return [...st.courseTypes]; // défaut global
+}
+
+function toggleDayService(dayIdx, svc){
+  const current = getDayServices(dayIdx);
+  const isSoiree = isSoireeDay(dayIdx);
+  if(isSoiree){
+    // Mode soirée : peut enlever apero ou dessert mais pas plat
+    if(svc === 'plat') return;
+    const idx = current.indexOf(svc);
+    const newServices = idx>=0 ? current.filter(s=>s!==svc) : [...current, svc];
+    // Garder l'ordre correct
+    const order = ['apero','entree','plat','dessert'];
+    st.dayStructures[dayIdx] = order.filter(s=>newServices.includes(s));
+  } else {
+    // Mode normal : peut enlever entrée ou dessert mais pas plat
+    if(svc === 'plat') return;
+    const idx = current.indexOf(svc);
+    const newServices = idx>=0 ? current.filter(s=>s!==svc) : [...current, svc];
+    const order = ['entree','plat','dessert'];
+    st.dayStructures[dayIdx] = order.filter(s=>newServices.includes(s));
+  }
+  // Regénérer ce jour seulement
+  regenerateDay(dayIdx);
+}
+
+function regenerateDay(dayIdx){
+  if(!st.menu[dayIdx]) return;
+  const pool = getPool();
+  const moments = ['petitdej','dejeuner','gouter','diner'].filter(m=>st.mealTypes.has(m));
+  const services = getDayServices(dayIdx);
+  const globalUsed = new Set(
+    st.menu.filter((_,i)=>i!==dayIdx)
+      .flatMap(day=>Object.values(day.meals).flatMap(meal=>Object.values(meal)))
+      .filter(Boolean).map(r=>r.id)
+  );
+  const allKnownCats = Object.values(COURSE_TYPE_MAP).flat();
+  for(const mt of moments){
+    const mtServices = SNACK_MOMENTS.has(mt)?['snack']:services;
+    for(const svc of mtServices){
+      const catIds = COURSE_TYPE_MAP[svc]||[];
+      const p = pool.filter(r=>{
+        if(globalUsed.has(r.id)) return false;
+        const rc=r.cats||[];
+        if(!rc.length) return svc==='plat'; // sans cat → plat par défaut
+        const hasCat=rc.some(c=>allKnownCats.includes(c)&&!EXCLUDED_CATS.includes(c));
+        return !hasCat||rc.some(c=>catIds.includes(c));
+      });
+      if(p.length){
+        const scored=shuffle(p).map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
+        const chosen=scored[0].r;
+        st.menu[dayIdx].meals[mt][svc]=chosen;
+        globalUsed.add(chosen.id);
+      }
+    }
+  }
+  renderMenus();
+  if(st.courses) renderCourses();
+}
+
+/* ── PREMIER JOUR DE LA SEMAINE ── */
+function setFirstDay(n){
+  document.querySelectorAll('[data-fd]').forEach(el=>{
+    el.classList.toggle('active', parseInt(el.getAttribute('data-fd'))===n);
+  });
+  st.firstDay = n;
+  // Mettre à jour les noms si un menu existe
+  if(st.menu.length){
+    const names = getDayNames();
+    st.menu.forEach((day,i)=>{ day.name = names[i]||`Jour ${i+1}`; });
+    renderMenus();
+  }
+}
+
+
+/* ── EXPORT MENU ── */
+function exportMenu(){
+  if(!st.menu.length){ alert('Générez d\'abord un menu.'); return; }
+
+  const MOMENT_ORDER = ['petitdej','dejeuner','gouter','diner'];
+  const moments = MOMENT_ORDER.filter(m => st.mealTypes.has(m));
+  const lines = [];
+
+  lines.push('🗓️ MENU DE LA SEMAINE');
+  lines.push('═'.repeat(30));
+  lines.push('');
+
+  st.menu.forEach((day, di) => {
+    const isSoir = day.isSoiree || st.soireeDays.has(di);
+    lines.push((isSoir ? '🥂 ' : '📅 ') + day.name.toUpperCase());
+    lines.push('─'.repeat(24));
+
+    for(const mt of moments) {
+      const meal = day.meals[mt];
+      if(!meal || !Object.keys(meal).length) continue;
+      const svcs = getDayServices(di);
+      const mtSvcs = SNACK_MOMENTS.has(mt) ? ['snack'] : svcs;
+      const hasContent = mtSvcs.some(svc => meal[svc]);
+      if(!hasContent) continue;
+
+      lines.push('  ' + (MOMENT_LABELS[mt]||mt));
+      for(const svc of mtSvcs) {
+        const r = meal[svc];
+        if(!r) continue;
+        const label = COURSE_LABELS[svc]||svc;
+        lines.push(`    ${label} : ${r.title}`);
+        if(r.time) lines.push(`    ⏱ ${r.time} min`);
+      }
+    }
+    lines.push('');
+  });
+
+  // Liste de courses si visible
+  if(st.courses) {
+    lines.push('');
+    lines.push('🛒 LISTE DE COURSES');
+    lines.push('═'.repeat(30));
+    // Récupérer les ingrédients
+    const CAT_KW_KEYS = ['🥬 Légumes frais','🌿 Aromates & Herbes','🧆 Légumineuses & Protéines','🌾 Céréales & Féculents','🥫 Conserves & Sauces','🫙 Épices & Condiments','🛒 Autres'];
+    const allR = st.menu.flatMap(day => Object.values(day.meals).flatMap(meal => Object.values(meal))).filter(Boolean);
+    const seen = new Set();
+    const ings = [];
+    allR.forEach(r => r.ings.forEach(ing => {
+      const cl = ing.replace(/^[\d\s.,/]+\s*(g|kg|ml|cl|l|càs|càc|boîte|bouquet|gousse|branche|filet|sachet|tasse|cup)?\s*/i,'').trim();
+      if(!cl || st.stock.some(s=>cl.toLowerCase().includes(s))) return;
+      if(!seen.has(cl.toLowerCase())) { seen.add(cl.toLowerCase()); ings.push(cl); }
+    }));
+    ings.forEach(i => lines.push(`  ☐ ${i}`));
+  }
+
+  lines.push('');
+  lines.push(`Généré le ${new Date().toLocaleDateString('fr-FR', {weekday:'long',day:'numeric',month:'long',year:'numeric'})}`);
+  lines.push('Menu de la Semaine — menu-sur-mesure.netlify.app');
+
+  const text = lines.join('\n');
+
+  // Créer et télécharger le fichier .txt
+  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `menu-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 
 async function init(){
   if(!getCookie('menuCookieOk'))document.getElementById('cookieBanner').style.display='flex';
@@ -656,21 +852,37 @@ function generate(){
     else{const allKnownCats=Object.values(COURSE_TYPE_MAP).flat();const catIds=COURSE_TYPE_MAP[svc]||[];poolByCourse[svc]=pool.filter(r=>{const rc=r.cats||[];if(rc.length&&rc.every(c=>EXCLUDED_CATS.includes(c)))return false;if(svc==='plat'&&rc.some(c=>PLAT_EXCLUDED.includes(c))&&!rc.some(c=>[8603,16929,15982,35459,35460].includes(c)))return false;// Exclure les boissons/jus des plats et entrées
       if(svc!=='dessert'&&DRINK_KW.some(k=>r.title.toLowerCase().includes(k)))return false;const hasCat=rc.some(c=>allKnownCats.includes(c)&&!EXCLUDED_CATS.includes(c));return !hasCat||rc.some(c=>catIds.includes(c));});if(!poolByCourse[svc].length)poolByCourse[svc]=pool.filter(r=>!DRINK_KW.some(k=>r.title.toLowerCase().includes(k)));}
   }
+  // Reset : nouvelle génération = état propre
+  st.dayStructures={};
+  st.soireeDays.clear(); // les jours soirée se rechoisissent après génération
   const days=[];
-  // Anti-doublon global : on track TOUS les IDs utilisés, tous services confondus
   const globalUsed=new Set();
+  const dayNames=getDayNames();
   for(let d=0;d<N;d++){
-    const dayObj={name:DAY_NAMES[d]||`Jour ${d+1}`,meals:{}};
-    for(const mt of moments){dayObj.meals[mt]={};const mtServices=SNACK_MOMENTS.has(mt)?['snack']:services;for(const svc of mtServices){const p=poolByCourse[svc];
-      // Filtre anti-doublon global
-      let avail=shuffle(p.filter(r=>!globalUsed.has(r.id)));
-      // Si le pool est épuisé (peu de recettes), on relâche le filtre global
-      if(!avail.length) avail=shuffle(p);
-      const scored=avail.map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
-      const chosen=scored[0]?.r||avail[0]||p[Math.floor(Math.random()*p.length)];
-      dayObj.meals[mt][svc]=chosen;
-      if(chosen) globalUsed.add(chosen.id);
-    }}
+    const isSoiree=st.soireeDays.has(d);
+    const daySvcs=isSoiree?SOIREE_SERVICES:(st.dayStructures[d]||services);
+    const dayLabel=isSoiree?`🥂 ${dayNames[d]||'Soirée'}`:(dayNames[d]||`Jour ${d+1}`);
+    const dayObj={name:dayLabel,meals:{},isSoiree};
+
+    // Construire pool pour apero si soirée
+    if(isSoiree && !poolByCourse['apero']){
+      poolByCourse['apero']=pool.filter(r=>(r.cats||[]).some(c=>COURSE_TYPE_MAP['apero'].includes(c)));
+      if(!poolByCourse['apero'].length) poolByCourse['apero']=pool;
+    }
+
+    for(const mt of moments){
+      dayObj.meals[mt]={};
+      const mtServices=SNACK_MOMENTS.has(mt)?['snack']:daySvcs;
+      for(const svc of mtServices){
+        const p=poolByCourse[svc]||poolByCourse['plat']||pool;
+        let avail=shuffle(p.filter(r=>!globalUsed.has(r.id)));
+        if(!avail.length) avail=shuffle(p);
+        const scored=avail.map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
+        const chosen=scored[0]?.r||avail[0]||p[Math.floor(Math.random()*p.length)];
+        dayObj.meals[mt][svc]=chosen;
+        if(chosen) globalUsed.add(chosen.id);
+      }
+    }
     days.push(dayObj);
   }
   st.menu=days;renderMenus();if(st.courses)renderCourses();
@@ -688,10 +900,30 @@ function renderAgenda(g){
   g.className='grid';g.style.display='flex';g.style.flexDirection='column';g.style.gap='10px';
   const moments=['petitdej','dejeuner','gouter','diner'].filter(m=>st.mealTypes.has(m));const COLS=2;
   st.menu.forEach((day,di)=>{
-    const card=document.createElement('div');card.style.cssText='background:var(--white);border:1px solid var(--warm);border-radius:10px;overflow:hidden';
-    let h=`<div style="background:#4a6e50;color:#fff;padding:6px 12px;font-size:12px;font-weight:500">${day.name}</div>`;
-    if(moments.length===1){const mt=moments[0];const svcs=getMtServices(mt);h+=`<div style="padding:8px 12px"><div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:6px">${MOMENT_LABELS[mt]||mt}</div>`;for(const svc of svcs)h+=recipeRow(day.meals[mt]?.[svc],di,mt,svc);h+=`</div>`;}
-    else{h+=`<div style="display:grid;grid-template-columns:1fr 1fr">`;moments.forEach((mt,idx)=>{const svcs=getMtServices(mt);const col=idx%COLS;const row=Math.floor(idx/COLS);const borderR=col<COLS-1?'border-right:1px solid var(--warm);':'';const borderT=row>0?'border-top:1px solid var(--warm);':'';h+=`<div style="padding:8px 10px;${borderR}${borderT}"><div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:5px">${MOMENT_LABELS[mt]||mt}</div>`;for(const svc of svcs)h+=recipeRow(day.meals[mt]?.[svc],di,mt,svc);h+=`</div>`;});h+=`</div>`;}
+    const card=document.createElement('div');
+    const isSoir=day.isSoiree||st.soireeDays.has(di);
+    card.style.cssText=`background:var(--white);border:1.5px solid ${isSoir?'#9c27b0':'var(--warm)'};border-radius:10px;overflow:hidden`;
+    const daySvcs=getDayServices(di);
+    // Boutons structure du jour
+    const normalSvcs=['entree','plat','dessert'];
+    const soireeSvcs=['apero','entree','plat','dessert'];
+    const availSvcs=isSoir?soireeSvcs:normalSvcs;
+    const structBtns=availSvcs.map(svc=>{
+      const on=daySvcs.includes(svc);
+      const label={entree:'🥗',plat:'🍲',dessert:'🍰',apero:'🥂'}[svc]||svc;
+      const locked=svc==='plat';
+      return `<button class="day-struct-btn${on?(isSoir?' soiree-on':' on'):''}" 
+        onclick="${locked?'':'toggleDayService('+di+',\''+svc+'\')'}"
+        style="${locked?'opacity:.5;cursor:default':''}"
+        title="${locked?'Plat toujours inclus':svc}">${label}</button>`;
+    }).join('');
+    const headerBg=isSoir?'#7b1fa2':'#4a6e50';
+    let h=`<div style="background:${headerBg};color:#fff;padding:6px 12px;display:flex;align-items:center;gap:6px">
+      <span style="font-size:12px;font-weight:500;flex:1">${day.name}</span>
+      <div style="display:flex;gap:3px">${structBtns}</div>
+    </div>`;
+    if(moments.length===1){const mt=moments[0];const svcs=SNACK_MOMENTS.has(mt)?['snack']:getDayServices(di);h+=`<div style="padding:8px 12px"><div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:6px">${MOMENT_LABELS[mt]||mt}</div>`;for(const svc of svcs)h+=recipeRow(day.meals[mt]?.[svc],di,mt,svc);h+=`</div>`;}
+    else{h+=`<div style="display:grid;grid-template-columns:1fr 1fr">`;moments.forEach((mt,idx)=>{const svcs=SNACK_MOMENTS.has(mt)?['snack']:getDayServices(di);const col=idx%COLS;const row=Math.floor(idx/COLS);const borderR=col<COLS-1?'border-right:1px solid var(--warm);':'';const borderT=row>0?'border-top:1px solid var(--warm);':'';h+=`<div style="padding:8px 10px;${borderR}${borderT}"><div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:5px">${MOMENT_LABELS[mt]||mt}</div>`;for(const svc of svcs)h+=recipeRow(day.meals[mt]?.[svc],di,mt,svc);h+=`</div>`;});h+=`</div>`;}
     card.innerHTML=h;g.appendChild(card);
   });
 }
@@ -701,8 +933,9 @@ function renderColumns(g){
   g.style.display='grid';g.style.gridTemplateColumns='repeat(3, 1fr)';g.style.gap='12px';g.className='grid';
   st.menu.forEach((day,di)=>{
     const card=document.createElement('div');card.style.cssText='background:var(--white);border:1px solid var(--warm);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:200px';
-    let h=`<div style="background:#4a6e50;color:#fff;padding:8px 14px;font-size:13px;font-weight:600;letter-spacing:.3px">${day.name}</div>`;
-    for(const mt of moments){const mtLabel=MOMENT_LABELS[mt]||mt;const svcs=getMtServices(mt);const isLast=moments.indexOf(mt)===moments.length-1;h+=`<div style="padding:10px 14px;${isLast?'':'border-bottom:1px solid var(--warm)'}"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px">${mtLabel}</div>`;for(const svc of svcs){const r=day.meals[mt]?.[svc];if(!r){h+=`<div style="font-size:12px;color:var(--muted);padding:3px 0">—</div>`;continue;}const [bg,col]=(COURSE_COLORS[svc]||'var(--warm)|var(--earth)').split('|');h+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 0;border-bottom:1px dashed var(--warm)"><span style="font-size:10px;padding:2px 6px;border-radius:8px;background:${bg};color:${col};flex-shrink:0;margin-top:1px">${COURSE_LABELS[svc]||svc}</span><span style="font-size:12px;flex:1;cursor:pointer;line-height:1.4;color:var(--ink)" onclick="openModalItem(${di},'${mt}','${svc}')">${r.title}</span><button onclick="event.stopPropagation();swapItem(${di},'${mt}','${svc}')" style="background:none;border:1px solid var(--warm);border-radius:5px;padding:2px 7px;font-size:11px;color:var(--muted);cursor:pointer;flex-shrink:0;white-space:nowrap;touch-action:manipulation">↻</button></div>`;}h+=`</div>`;}
+    const isSoirC=day.isSoiree||st.soireeDays.has(di);
+    let h=`<div style="background:${isSoirC?'#7b1fa2':'#4a6e50'};color:#fff;padding:8px 14px;font-size:13px;font-weight:600;letter-spacing:.3px">${day.name}</div>`;
+    const daySvcsC=getDayServices(di);for(const mt of moments){const mtLabel=MOMENT_LABELS[mt]||mt;const svcs=SNACK_MOMENTS.has(mt)?['snack']:daySvcsC;const isLast=moments.indexOf(mt)===moments.length-1;h+=`<div style="padding:10px 14px;${isLast?'':'border-bottom:1px solid var(--warm)'}"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px">${mtLabel}</div>`;for(const svc of svcs){const r=day.meals[mt]?.[svc];if(!r){h+=`<div style="font-size:12px;color:var(--muted);padding:3px 0">—</div>`;continue;}const [bg,col]=(COURSE_COLORS[svc]||'var(--warm)|var(--earth)').split('|');h+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 0;border-bottom:1px dashed var(--warm)"><span style="font-size:10px;padding:2px 6px;border-radius:8px;background:${bg};color:${col};flex-shrink:0;margin-top:1px">${COURSE_LABELS[svc]||svc}</span><span style="font-size:12px;flex:1;cursor:pointer;line-height:1.4;color:var(--ink)" onclick="openModalItem(${di},'${mt}','${svc}')">${r.title}</span><button onclick="event.stopPropagation();swapItem(${di},'${mt}','${svc}')" style="background:none;border:1px solid var(--warm);border-radius:5px;padding:2px 7px;font-size:11px;color:var(--muted);cursor:pointer;flex-shrink:0;white-space:nowrap;touch-action:manipulation">↻</button></div>`;}h+=`</div>`;}
     card.innerHTML=h;g.appendChild(card);
   });
 }
