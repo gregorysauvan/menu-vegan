@@ -763,11 +763,11 @@ async function exportMenu(){
             if(ss){ const sl=doc.splitTextToSize(ss,CW-6); check(4); doc.text(sl[0],ML+3,y+3); y+=4; }
           }
         }
-        if(r.id&&r.id.startsWith('http')){
+        var rid=String(r.id||''); if(rid.startsWith('http')){
           check(4);
           doc.setFont('helvetica','normal'); doc.setFontSize(6);
           doc.setTextColor(140,134,120);
-          doc.text(r.id.replace(/^https?:\/\/(www\.)?/,'').slice(0,70),ML+3,y+3);
+          doc.text(rid.replace(/^https?:\/\/(www\.)?/,'').slice(0,70),ML+3,y+3);
           y+=4;
         }
         y+=2;
