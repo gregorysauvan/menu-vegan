@@ -1,105 +1,34 @@
-const { getStore } = require('@netlify/blobs');
+import { getStore } from '@netlify/blobs';
 
-// ═══════════════════════════════════════════════════════
-// CATALOGUE DES SOURCES DISPONIBLES
-// Chaque source définit comment récupérer ses recettes
-// ═══════════════════════════════════════════════════════
 const SOURCES = {
-  'lafeestephanie': {
-    name: 'La fée Stéphanie',
-    url: 'https://www.lafeestephanie.com',
-    type: 'wordpress',
-    specialty: 'vegan',
-    icon: '🧚',
-  },
-  'rosecitron': {
-    name: 'Rose Citron',
-    url: 'https://rosecitron.fr',
-    type: 'wordpress',
-    specialty: 'vegan',
-    icon: '🍋',
-  },
-  'deliacious': {
-    name: 'Deliacious',
-    url: 'https://deliacious.com',
-    type: 'blogger',
-    specialty: 'vegan',
-    icon: '🌱',
-  },
-  'freethepickle': {
-    name: 'Free The Pickle',
-    url: 'https://freethepickle.fr',
-    type: 'wordpress',
-    specialty: 'vegan',
-    icon: '🥒',
-  },
-  'healthylalou': {
-    name: 'Healthy Lalou',
-    url: 'https://healthylalou.fr',
-    type: 'wordpress',
-    specialty: 'healthy',
-    icon: '💚',
-  },
-  'saveursbio': {
-    name: 'Saveurs Bio',
-    url: 'https://www.saveurs-bio.fr',
-    type: 'wordpress',
-    specialty: 'bio',
-    icon: '🌿',
-  },
-  'barbarafrenchvegan': {
-    name: 'Barbara French Vegan',
-    url: 'https://barbarafrenchvegan.com',
-    type: 'wordpress',
-    specialty: 'vegan',
-    icon: '🌸',
-  },
-  'iletaituneveggie': {
-    name: 'Il était une veggie',
-    url: 'https://iletaituneveggie.com',
-    type: 'wordpress',
-    specialty: 'vegan',
-    icon: '🥦',
-  },
+  'lafeestephanie': { name: 'La fée Stéphanie', url: 'https://www.lafeestephanie.com', type: 'wordpress', specialty: 'vegan', icon: '🧚' },
+  'rosecitron':     { name: 'Rose Citron',       url: 'https://rosecitron.fr',           type: 'wordpress', specialty: 'vegan', icon: '🍋' },
+  'deliacious':     { name: 'Deliacious',         url: 'https://deliacious.com',          type: 'blogger',   specialty: 'vegan', icon: '🌱' },
+  'freethepickle':  { name: 'Free The Pickle',    url: 'https://freethepickle.fr',        type: 'wordpress', specialty: 'vegan', icon: '🥒' },
+  'healthylalou':   { name: 'Healthy Lalou',      url: 'https://healthylalou.fr',         type: 'wordpress', specialty: 'healthy', icon: '💚' },
+  'saveursbio':     { name: 'Saveurs Bio',         url: 'https://www.saveurs-bio.fr',      type: 'wordpress', specialty: 'bio',   icon: '🌿' },
+  'barbarafrenchvegan': { name: 'Barbara French Vegan', url: 'https://barbarafrenchvegan.com', type: 'wordpress', specialty: 'vegan', icon: '🌸' },
+  'iletaituneveggie':   { name: 'Il était une veggie',  url: 'https://iletaituneveggie.com',   type: 'wordpress', specialty: 'vegan', icon: '🥦' },
   'papillesetpupilles': {
-    name: 'Papilles et Pupilles',
-    url: 'https://www.papillesetpupilles.fr',
-    type: 'sitemap',
-    sitemaps: [
-      'https://www.papillesetpupilles.fr/post-sitemap.xml',
-      'https://www.papillesetpupilles.fr/post-sitemap2.xml',
-      'https://www.papillesetpupilles.fr/post-sitemap3.xml',
-    ],
-    specialty: 'general',
-    icon: '👅',
+    name: 'Papilles et Pupilles', url: 'https://www.papillesetpupilles.fr', type: 'sitemap', specialty: 'general', icon: '👅',
+    sitemaps: ['https://www.papillesetpupilles.fr/post-sitemap.xml','https://www.papillesetpupilles.fr/post-sitemap2.xml','https://www.papillesetpupilles.fr/post-sitemap3.xml'],
   },
   'ptitchef': {
-    name: 'Ptitchef',
-    url: 'https://www.ptitchef.com',
-    type: 'sitemap',
-    sitemaps: [
-      'https://www.ptitchef.com/upload_data/sitemaps/recipe-fr-1.xml',
-    ],
-    maxRecipes: 3000, // limiter pour la perf
-    specialty: 'general',
-    icon: '👨‍🍳',
+    name: 'Ptitchef', url: 'https://www.ptitchef.com', type: 'sitemap', specialty: 'general', icon: '👨‍🍳', maxRecipes: 3000,
+    sitemaps: ['https://www.ptitchef.com/upload_data/sitemaps/recipe-fr-1.xml'],
   },
 };
 
-const FETCH_OPTS = {
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120',
-    'Accept': 'text/html,application/xml,application/json,*/*',
-    'Accept-Language': 'fr-FR,fr;q=0.9',
-  },
+const FETCH_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120',
+  'Accept': 'text/html,application/xml,application/json,*/*',
+  'Accept-Language': 'fr-FR,fr;q=0.9',
 };
 
 async function pFetch(url, timeout = 15000) {
-  const res = await fetch(url, { ...FETCH_OPTS, signal: AbortSignal.timeout(timeout) });
-  return res;
+  return fetch(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(timeout) });
 }
 
-// ── Extraire JSON-LD Recipe depuis HTML ──
 function extractRecipe(html, url, srcKey) {
   const blocks = [...html.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   for (const block of blocks) {
@@ -118,25 +47,20 @@ function extractRecipe(html, url, srcKey) {
         const photo = Array.isArray(img) ? img[0] : (img && typeof img === 'object' ? img.url : img) || null;
         const title = (item.name || '').replace(/<[^>]+>/g, '').trim().slice(0, 65);
         if (!title) continue;
-        // Parser durée
         const timeStr = item.totalTime || item.cookTime || '';
         const tm = timeStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
         const time = tm ? (+(tm[1] || 0)) * 60 + (+(tm[2] || 0)) : 0;
-        return { id: url, src: srcKey, title, photo: photo ? String(photo).slice(0, 300) : null,
-          time, ings: ings.slice(0, 12), steps: steps.slice(0, 6), cats: [] };
+        return { id: url, src: srcKey, title, photo: photo ? String(photo).slice(0, 300) : null, time, ings: ings.slice(0, 12), steps: steps.slice(0, 6), cats: [] };
       }
     } catch (e) {}
   }
   return null;
 }
 
-// ── Charger WordPress (WP REST API) ──
 async function loadWordpress(sourceKey, source, onProgress) {
   const base = source.url;
-  const results = [];
+  const results = [], allLinks = [];
   let page = 1, totalPages = 1;
-  const allLinks = [];
-
   while (page <= Math.min(totalPages, 20)) {
     try {
       const r = await pFetch(`${base}/wp-json/wp/v2/posts?per_page=50&page=${page}&_fields=link`);
@@ -148,13 +72,9 @@ async function loadWordpress(sourceKey, source, onProgress) {
       page++;
     } catch (e) { break; }
   }
-
   onProgress(`${source.name}: ${allLinks.length} articles…`);
-
-  // Charger les pages par batch de 8
   for (let i = 0; i < allLinks.length; i += 8) {
-    const batch = allLinks.slice(i, i + 8);
-    await Promise.all(batch.map(async link => {
+    await Promise.all(allLinks.slice(i, i + 8).map(async link => {
       try {
         const r = await pFetch(link, 12000);
         if (!r.ok) return;
@@ -167,30 +87,23 @@ async function loadWordpress(sourceKey, source, onProgress) {
   return results;
 }
 
-// ── Charger Blogger (RSS + pages) ──
 async function loadBlogger(sourceKey, source, onProgress) {
   const base = source.url;
-  const results = [];
-  const allLinks = [];
-
+  const results = [], allLinks = [];
   for (let start = 1; start <= 500; start += 25) {
     try {
       const r = await pFetch(`${base}/feeds/posts/default?alt=rss&max-results=25&start-index=${start}`);
       if (!r.ok) break;
       const text = await r.text();
-      const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)]
-        .map(m => m[1]).filter(l => l !== base && l !== base + '/');
+      const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)].map(m => m[1]).filter(l => l !== base && l !== base + '/');
       if (!links.length) break;
       allLinks.push(...links);
       if (allLinks.length >= 500) break;
     } catch (e) { break; }
   }
-
   onProgress(`${source.name}: ${allLinks.length} articles…`);
-
   for (let i = 0; i < allLinks.length; i += 8) {
-    const batch = allLinks.slice(i, i + 8);
-    await Promise.all(batch.map(async link => {
+    await Promise.all(allLinks.slice(i, i + 8).map(async link => {
       try {
         const r = await pFetch(link, 12000);
         if (!r.ok) return;
@@ -202,12 +115,9 @@ async function loadBlogger(sourceKey, source, onProgress) {
   return results;
 }
 
-// ── Charger via Sitemap XML ──
 async function loadSitemap(sourceKey, source, onProgress) {
-  const results = [];
-  const allLinks = [];
+  const results = [], allLinks = [];
   const max = source.maxRecipes || 99999;
-
   for (const smUrl of source.sitemaps) {
     try {
       const r = await pFetch(smUrl, 20000);
@@ -218,13 +128,10 @@ async function loadSitemap(sourceKey, source, onProgress) {
       if (allLinks.length >= max) break;
     } catch (e) { continue; }
   }
-
   const limited = allLinks.slice(0, max);
   onProgress(`${source.name}: ${limited.length} URLs…`);
-
   for (let i = 0; i < limited.length; i += 10) {
-    const batch = limited.slice(i, i + 10);
-    await Promise.all(batch.map(async link => {
+    await Promise.all(limited.slice(i, i + 10).map(async link => {
       try {
         const r = await pFetch(link, 12000);
         if (!r.ok) return;
@@ -237,87 +144,64 @@ async function loadSitemap(sourceKey, source, onProgress) {
   return results;
 }
 
-// ═══════════════════════════════════════════════════════
-// HANDLER PRINCIPAL
-// ═══════════════════════════════════════════════════════
-exports.handler = async (event) => {
+export default async (req, context) => {
   const store = getStore('recipes-cache');
-  const params = event.queryStringParameters || {};
-  const action = params.action || 'rebuild';
-  const sourceKey = params.source || null; // rebuild une seule source si spécifié
+  const url = new URL(req.url);
+  const action = url.searchParams.get('action') || 'rebuild';
+  const sourceKey = url.searchParams.get('source') || null;
 
-  // ── GET /list-sources : catalogue disponible + état cache ──
+  // GET ?action=list
   if (action === 'list') {
     const result = {};
     for (const [key, src] of Object.entries(SOURCES)) {
       try {
         const meta = await store.get(`src-meta-${key}`, { type: 'json' });
-        result[key] = {
-          ...src,
-          cached: !!meta,
-          count: meta?.count || 0,
-          updatedAt: meta?.ts || null,
-        };
+        result[key] = { ...src, cached: !!meta, count: meta?.count || 0, updatedAt: meta?.ts || null };
       } catch (e) {
         result[key] = { ...src, cached: false, count: 0, updatedAt: null };
       }
     }
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify(result),
-    };
+    return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  // ── GET /get-source?source=key : lire les recettes d'une source ──
+  // GET ?action=get&source=key
   if (action === 'get') {
-    if (!sourceKey) return { statusCode: 400, body: 'source requis' };
+    if (!sourceKey) return new Response('source requis', { status: 400 });
     try {
       const data = await store.get(`src-${sourceKey}`, { type: 'json' });
-      return {
-        statusCode: data ? 200 : 404,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        body: data ? JSON.stringify(data) : '[]',
-      };
+      return new Response(data ? JSON.stringify(data) : '[]', {
+        status: data ? 200 : 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
     } catch (e) {
-      return { statusCode: 500, body: String(e) };
+      return new Response(String(e), { status: 500 });
     }
   }
 
-  // ── POST /rebuild : reconstruire une ou toutes les sources ──
+  // POST ?action=rebuild
   const sourcesToBuild = sourceKey
     ? (SOURCES[sourceKey] ? { [sourceKey]: SOURCES[sourceKey] } : {})
     : SOURCES;
 
   const log = [];
-  const onProgress = (msg) => { log.push(msg); console.log(msg); };
+  const onProgress = msg => { log.push(msg); console.log(msg); };
 
   for (const [key, source] of Object.entries(sourcesToBuild)) {
     onProgress(`⏳ Démarrage ${source.name}…`);
     try {
       let recipes = [];
-      if (source.type === 'wordpress') {
-        recipes = await loadWordpress(key, source, onProgress);
-      } else if (source.type === 'blogger') {
-        recipes = await loadBlogger(key, source, onProgress);
-      } else if (source.type === 'sitemap') {
-        recipes = await loadSitemap(key, source, onProgress);
-      }
-
-      // Sauvegarder dans Blobs
+      if (source.type === 'wordpress')   recipes = await loadWordpress(key, source, onProgress);
+      else if (source.type === 'blogger') recipes = await loadBlogger(key, source, onProgress);
+      else if (source.type === 'sitemap') recipes = await loadSitemap(key, source, onProgress);
       await store.setJSON(`src-${key}`, recipes);
-      await store.setJSON(`src-meta-${key}`, {
-        ts: Date.now(), count: recipes.length, name: source.name,
-      });
+      await store.setJSON(`src-meta-${key}`, { ts: Date.now(), count: recipes.length, name: source.name });
       onProgress(`✅ ${source.name}: ${recipes.length} recettes sauvegardées`);
     } catch (e) {
       onProgress(`❌ ${source.name}: ${e.message}`);
     }
   }
 
-  return {
-    statusCode: 200,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify({ ok: true, log }),
-  };
+  return new Response(JSON.stringify({ ok: true, log }), { headers: { 'Content-Type': 'application/json' } });
 };
+
+export const config = { path: '/.netlify/functions/rebuild-db' };

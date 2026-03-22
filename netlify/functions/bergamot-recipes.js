@@ -1,13 +1,14 @@
-const { getStore } = require('@netlify/blobs');
+import { getStore } from '@netlify/blobs';
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-exports.handler = async (event) => {
-  const token = event.headers.authorization || event.headers.Authorization;
-  if (!token) return { statusCode: 401, body: 'Token manquant' };
+export default async (req, context) => {
+  const token = req.headers.get('authorization') || req.headers.get('Authorization');
+  if (!token) return new Response('Token manquant', { status: 401 });
 
   const store = getStore('recipes-cache');
-  const force = event.queryStringParameters?.force === '1';
+  const url = new URL(req.url);
+  const force = url.searchParams.get('force') === '1';
 
   if (!force) {
     try {
@@ -15,14 +16,12 @@ exports.handler = async (event) => {
       if (meta && Date.now() - meta.ts < TTL_MS) {
         const cached = await store.get('bergamot-recipes', { type: 'json' });
         if (cached && cached.length > 0) {
-          return {
-            statusCode: 200,
-            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'HIT' },
-            body: JSON.stringify(cached),
-          };
+          return new Response(JSON.stringify(cached), {
+            headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
+          });
         }
       }
-    } catch(e) { console.warn('Blobs read:', e.message); }
+    } catch (e) { console.warn('Blobs read:', e.message); }
   }
 
   try {
@@ -30,7 +29,7 @@ exports.handler = async (event) => {
       headers: { Authorization: token },
       signal: AbortSignal.timeout(60000),
     });
-    if (!res.ok) return { statusCode: res.status, body: `Bergamot error ${res.status}` };
+    if (!res.ok) return new Response(`Bergamot error ${res.status}`, { status: res.status });
 
     const all = await res.json();
     const out = [];
@@ -40,22 +39,24 @@ exports.handler = async (event) => {
       if (ings.length < 2 || steps.length < 1) continue;
       const photos = r.photos || [];
       out.push({
-        id: r.id, t: (r.title||'').trim().slice(0,65),
+        id: r.id, t: (r.title || '').trim().slice(0, 65),
         p: photos[0]?.photoThumbUrl || null,
         tm: r.time?.totalTime || 0,
-        in: ings.slice(0,10), st: steps.slice(0,5), c: r.categories || [],
+        in: ings.slice(0, 10), st: steps.slice(0, 5), c: r.categories || [],
       });
     }
 
     try {
       await store.setJSON('bergamot-recipes', out);
       await store.setJSON('bergamot-meta', { ts: Date.now(), count: out.length });
-    } catch(e) { console.warn('Blobs write:', e.message); }
+    } catch (e) { console.warn('Blobs write:', e.message); }
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'MISS' },
-      body: JSON.stringify(out),
-    };
-  } catch(e) { return { statusCode: 500, body: String(e) }; }
+    return new Response(JSON.stringify(out), {
+      headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' },
+    });
+  } catch (e) {
+    return new Response(String(e), { status: 500 });
+  }
 };
+
+export const config = { path: '/.netlify/functions/bergamot-recipes' };
