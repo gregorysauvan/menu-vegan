@@ -192,7 +192,101 @@ async function pGet(url, timeout=20000){
   return r;
 }
 
-function extractRecipeFromHtml(html, pageUrl, srcKey){
+// ── MAPPING CATÉGORIES WORDPRESS → CATS INTERNES ─────────────────
+// Récupère les catégories WP d'un site et construit un mapping id → cats internes
+async function fetchWpCategoryMap(base) {
+  const map = {}; // wpCatId → [cats internes]
+  try {
+    const r = await pGet(`${base}/wp-json/wp/v2/categories?per_page=100&_fields=id,slug,name`);
+    if (!r.ok) return map;
+    const cats = await r.json();
+    for (const cat of cats) {
+      const s = cat.slug.toLowerCase();
+      const n = cat.name.toLowerCase().replace(/&amp;/g,'').replace(/[^a-zàâäéèêëîïôùûüç0-9\s-]/g,'');
+      const all = s + ' ' + n;
+      let mapped = null;
+
+      // ── Dessert / Pâtisserie ──
+      if (/dessert|gateau|gâteau|biscuit|cookie|glace|sorbet|gourmandise|patisserie|pâtisserie|muffin|brownie|cake|confiserie|confiture|tarte.sucrée|entremets|fondant|macaron|crepe.sucr|tiramisu|clafoutis|sucre$|sucr[eé]$/.test(all))
+        mapped = [8604];
+      // ── Petit-déj / Goûter ──
+      else if (/petit.?d[eé]j|gouter|goûter|brunch|pancake|porridge|granola|viennoiserie|smoothie.bowl/.test(all))
+        mapped = [8608];
+      // ── Boisson (exclue des menus) ──
+      else if (/^boisson|^drinks|^cocktail|jus.de|smoothie$/.test(all))
+        mapped = [13569]; // cat exclue
+      // ── Entrée / Apéritif ──
+      else if (/entr[eé]e|salade$|salades$|salade.composee|aperitif|apéritif|apero|apéro|verrine|tartine|amuse|antipasti|bruschetta|starter/.test(all))
+        mapped = [8602];
+      // ── Soupe / Velouté → Plat ──
+      else if (/soupe|velout|potage|bouillon|minestrone/.test(all))
+        mapped = [8603];
+      // ── Plat principal ──
+      else if (/plat.principal|plats.principaux|plat$|viande.v[eé]g|viandes.v[eé]g|legumineuse|légumineuse|pate$|pâte$|pates|pâtes|riz$|cereal|c[eé]r[eé]ale|pizza|quiche|sandwich|street|burger|buddha|bowl|assiette|wok|mijoté|gratin|curry|tajine|fajita|accompagnement|dejeuner$|diner$|pasta$|saute|sauté/.test(all))
+        mapped = [8603];
+      // ── Boulange / Pain → Plat (souvent des snacks mais classés plat) ──
+      else if (/boulange|boulangerie|pain$|brioche|bread|focaccia|baguette/.test(all))
+        mapped = [8603];
+
+      if (mapped) map[cat.id] = mapped;
+    }
+  } catch(e) {
+    console.warn('fetchWpCategoryMap:', e.message);
+  }
+  return map;
+}
+
+// Cache des maps de catégories par site (évite de re-fetcher à chaque recette)
+const _wpCatMapCache = {};
+
+// ── DÉTECTION AUTOMATIQUE DE CATÉGORIE ──────────────────────────
+// IDs internes : 8602=Entrée  8603=Plat principal  8604=Dessert  8608=Petit-déj/Goûter
+function guessCats(title, ings, jsonldCat, jsonldKw){
+  const t   = title.toLowerCase();
+  const i   = ings.join(' ').toLowerCase();
+  const cat = (jsonldCat||'').toLowerCase();
+  const kw  = (jsonldKw||'').toLowerCase();
+  const all = t + ' ' + cat + ' ' + kw;
+
+  // 1. Signaux forts JSON-LD recipeCategory / keywords
+  if(/dessert|gâteau|gateau|cake|brownie|cookie|biscuit|mousse|tiramisu|fondant|cheesecake|muffin|cupcake|clafoutis|pudding|sorbet|glace/.test(all))
+    return [8604];
+  if(/petit.?d[eé]j|goûter|gouter|brunch|pancake|porridge|granola|smoothie bowl/.test(all))
+    return [8608];
+  if(/entr[ée]e|starter|amuse|apéritif|aperitif|verrine|tartare|carpaccio/.test(all))
+    return [8602];
+  if(/plat principal|main course|platprincipal/.test(all))
+    return [8603];
+
+  // 2. Mots-clés titre → dessert
+  if(/gâteau|gateau|cake|brownie|cookie|biscuit|fondant|moelleux|tarte au |tarte tatin|mousse au |crème dessert|glace |sorbet|compote|confiture|caramel sucré/.test(t))
+    return [8604];
+
+  // 3. Mots-clés titre → plat
+  if(/soupe|velouté|potage|minestrone|curry|tajine|risotto|gratin|lasagne|pizza|wok|sauté|mijoté|ragoût|blanquette|ratatouille|poêlée|fricassée/.test(t))
+    return [8603];
+
+  // 4. Mots-clés titre → entrée
+  if(/\bsalade\b/.test(t) && !/salade de fruits/.test(t)) return [8602];
+  if(/\bverrines?\b|\btartines?\b|\btoasts?\b/.test(t)) return [8602];
+
+  // 5. Ingrédients → détecter dessert (≥3 marqueurs pâtisserie)
+  const sucre  = /sucre|chocolat|cacao|miel|sirop d.érable/.test(i);
+  const farine = /farine|maïzena|levure chimique|poudre d.amande|fécule/.test(i);
+  const oeuf   = /oeuf|œuf/.test(i);
+  const beurre = /beurre/.test(i);
+  if([sucre,farine,oeuf,beurre].filter(Boolean).length >= 3) return [8604];
+
+  // 6. Ingrédients → plat (protéine végétale OU féculent présent)
+  const protVege = /tofu|tempeh|seitan|lentille|pois chiche|haricot/.test(i);
+  const feculent = /riz|pâtes|quinoa|semoule|pomme de terre|patate/.test(i);
+  if(protVege || feculent) return [8603];
+
+  // 7. Par défaut → plat principal
+  return [8603];
+}
+
+function extractRecipeFromHtml(html, pageUrl, srcKey, wpCats=[], catMap={}){
   const blocks = [...html.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
   for(const block of blocks){
     try {
@@ -205,16 +299,35 @@ function extractRecipeFromHtml(html, pageUrl, srcKey){
         const rawSteps = item.recipeInstructions || [];
         const steps = (Array.isArray(rawSteps)?rawSteps:[rawSteps])
           .map(s=>typeof s==='object'?(s.text||''):String(s)).filter(s=>s.trim().length>5);
-        const img = item.image;
+        const img   = item.image;
         const photo = Array.isArray(img)?img[0]:(img&&typeof img==='object'?img.url:img)||null;
         const title = (item.name||'').replace(/<[^>]+>/g,'').trim().slice(0,65);
         if(!title) continue;
         const timeStr = item.totalTime||item.cookTime||'';
         const tm = timeStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
         const time = tm?(+(tm[1]||0))*60+(+(tm[2]||0)):0;
+
+        // Récupérer les meta de catégorie du JSON-LD
+        const jsonldCat = Array.isArray(item.recipeCategory)
+          ? item.recipeCategory.join(' ')
+          : (item.recipeCategory||'');
+        const jsonldKw = Array.isArray(item.keywords)
+          ? item.keywords.join(' ')
+          : (item.keywords||'');
+
+        // Priorité : catégories WP → JSON-LD → analyse titre/ings
+        let cats = null;
+        // 1. Catégories WP (les plus fiables)
+        if(wpCats.length) {
+          const wpMapped = wpCats.flatMap(id => catMap[id]||[]);
+          if(wpMapped.length) cats = [...new Set(wpMapped)];
+        }
+        // 2. Fallback : JSON-LD + analyse titre/ingrédients
+        if(!cats) cats = guessCats(title, ings, jsonldCat, jsonldKw);
+
         return {id:pageUrl, src:srcKey, title,
           photo: photo?String(photo).slice(0,300):null,
-          time, ings:ings.slice(0,12), steps:steps.slice(0,6), cats:[]};
+          time, ings:ings.slice(0,12), steps:steps.slice(0,6), cats};
       }
     } catch(e){}
   }
@@ -223,33 +336,43 @@ function extractRecipeFromHtml(html, pageUrl, srcKey){
 
 async function scrapeWordpress(key, src){
   const base = src.url;
-  const allLinks = [];
+
+  // Charger le mapping catégories WP → cats internes (une seule fois par site)
+  if (!_wpCatMapCache[key]) {
+    log(`  → Chargement des catégories WP…`);
+    _wpCatMapCache[key] = await fetchWpCategoryMap(base);
+    log(`  → ${Object.keys(_wpCatMapCache[key]).length} catégories mappées`);
+  }
+  const catMap = _wpCatMapCache[key];
+
+  // Récupérer liens + catégories WP de chaque post en une seule requête
+  const allPosts = [];
   let page=1, totalPages=1;
   while(page <= Math.min(totalPages, 20)){
     try {
-      const r = await pGet(`${base}/wp-json/wp/v2/posts?per_page=50&page=${page}&_fields=link`);
+      const r = await pGet(`${base}/wp-json/wp/v2/posts?per_page=50&page=${page}&_fields=link,categories`);
       if(!r.ok) break;
       if(page===1) totalPages = parseInt(r.headers.get('X-WP-TotalPages')||'1');
       const posts = await r.json();
       if(!Array.isArray(posts)||!posts.length) break;
-      posts.forEach(p=>{if(p.link)allLinks.push(p.link);});
+      posts.forEach(p=>{ if(p.link) allPosts.push({link:p.link, wpCats:p.categories||[]}); });
       page++;
     } catch(e){ break; }
   }
-  log(`  → ${allLinks.length} articles trouvés`);
+  log(`  → ${allPosts.length} articles trouvés`);
+
   const results = [];
-  for(let i=0; i<allLinks.length; i+=5){
-    const batch = allLinks.slice(i,i+5);
-    await Promise.all(batch.map(async link=>{
+  for(let i=0; i<allPosts.length; i+=5){
+    const batch = allPosts.slice(i,i+5);
+    await Promise.all(batch.map(async ({link, wpCats})=>{
       try {
         const r = await pGet(link, 15000);
         if(!r.ok) return;
-        const recipe = extractRecipeFromHtml(await r.text(), link, key);
+        const recipe = extractRecipeFromHtml(await r.text(), link, key, wpCats, catMap);
         if(recipe) results.push(recipe);
       } catch(e){}
     }));
     if(i%50===0 && i>0) log(`  → ${results.length} recettes extraites…`);
-    // Petite pause pour ne pas surcharger
     await new Promise(r=>setTimeout(r,100));
   }
   return results;

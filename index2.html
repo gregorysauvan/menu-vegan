@@ -229,6 +229,13 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 @media(max-width:700px){#grid[style*="repeat(3"]{grid-template-columns:repeat(2,1fr)!important;}}
 @media(max-width:440px){#grid[style*="repeat"]{grid-template-columns:1fr!important;}}
 @media print{header,.sidebar,.settings-overlay,#cookieBanner,.btn-swap,.overlay{display:none!important;}.layout{display:block;}.main-content{padding:0;}.courses{display:block!important;}.card{break-inside:avoid;}}
+
+/* ── BOUTON GÉNÉRER INLINE ── */
+.btn-gen-inline{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px 20px;background:var(--sage-dark);color:#fff;border:none;border-radius:10px;font-family:inherit;font-size:1rem;font-weight:600;cursor:pointer;touch-action:manipulation;transition:background .2s,transform .1s;margin-bottom:14px;box-shadow:0 2px 8px rgba(74,110,80,.25);}
+.btn-gen-inline:hover{background:var(--sage);transform:translateY(-1px);}
+.btn-gen-inline:active{transform:translateY(0);}
+.btn-gen-inline .btn-gen-icon{font-size:1.2rem;}
+@media(max-width:640px){.btn-gen-inline{padding:12px 16px;font-size:.92rem;}}
 </style>
 </head>
 <body>
@@ -395,6 +402,10 @@ header h1 span{color:var(--sage-light);font-style:italic;}
         </div>
       </div>
     </div>
+    <button class="btn-gen-inline" onclick="generate()">
+      <span class="btn-gen-icon">🎲</span>
+      Générer le menu
+    </button>
     <div class="grid" id="grid">
       <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);font-style:italic">Configurez vos filtres et cliquez sur « Générer » ✨</div>
     </div>
