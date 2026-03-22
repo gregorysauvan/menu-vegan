@@ -186,22 +186,10 @@ function logClear(){ document.getElementById('logBox').textContent = ''; }
 
 // ── SCRAPING CÔTÉ CLIENT ─────────────────────────────────────────
 // Proxy CORS via la fonction check-site existante
-// Fetch direct depuis le navigateur — pas de CORS sur les sites publics
-// Plus fiable que check-site qui pouvait tronquer les pages
-async function pGetDirect(url, timeout=20000){
-  const r = await fetch(url, {
-    signal: AbortSignal.timeout(timeout),
-    headers: {
-      'Accept': 'text/html,application/xhtml+xml,application/xml,application/json,*/*',
-      'Accept-Language': 'fr-FR,fr;q=0.9',
-    }
-  });
-  return r;
-}
-
-// Alias — tout passe maintenant en direct
 async function pGet(url, timeout=20000){
-  return pGetDirect(url, timeout);
+  const r = await fetch(`/.netlify/functions/check-site?url=${encodeURIComponent(url)}`,
+    {signal: AbortSignal.timeout(timeout)});
+  return r;
 }
 
 // ── MAPPING CATÉGORIES WORDPRESS → CATS INTERNES ─────────────────
@@ -209,7 +197,7 @@ async function pGet(url, timeout=20000){
 async function fetchWpCategoryMap(base) {
   const map = {}; // wpCatId → [cats internes]
   try {
-    const r = await pGetDirect(`${base}/wp-json/wp/v2/categories?per_page=100&_fields=id,slug,name`);
+    const r = await pGet(`${base}/wp-json/wp/v2/categories?per_page=100&_fields=id,slug,name`);
     if (!r.ok) return map;
     const cats = await r.json();
     for (const cat of cats) {
@@ -410,7 +398,7 @@ async function scrapeWordpress(key, src){
   let page=1, totalPages=1;
   while(page <= Math.min(totalPages, 20)){
     try {
-      const r = await pGetDirect(`${base}/wp-json/wp/v2/posts?per_page=50&page=${page}&_fields=link,categories`);
+      const r = await pGet(`${base}/wp-json/wp/v2/posts?per_page=50&page=${page}&_fields=link,categories`);
       if(!r.ok) break;
       if(page===1) totalPages = parseInt(r.headers.get('X-WP-TotalPages')||'1');
       const posts = await r.json();
@@ -441,16 +429,11 @@ async function scrapeWordpress(key, src){
 async function scrapeBlogger(key, src){
   const base = src.url;
   const allLinks = [];
-
-  // Essayer Blogger d'abord
-  let isBlogger = false;
   for(let start=1; start<=500; start+=25){
     try {
-      const r = await pGetDirect(`${base}/feeds/posts/default?alt=rss&max-results=25&start-index=${start}`);
+      const r = await pGet(`${base}/feeds/posts/default?alt=rss&max-results=25&start-index=${start}`);
       if(!r.ok) break;
       const text = await r.text();
-      if(!text.includes('<rss') && !text.includes('<feed')) break;
-      isBlogger = true;
       const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)]
         .map(m=>m[1]).filter(l=>l!==base&&l!==base+'/');
       if(!links.length) break;
@@ -458,25 +441,6 @@ async function scrapeBlogger(key, src){
       if(allLinks.length>=500) break;
     } catch(e){ break; }
   }
-
-  // Fallback : essayer le flux RSS WordPress standard (/feed/)
-  if(!isBlogger || !allLinks.length) {
-    log(`  → Blogger non disponible, essai RSS WP…`);
-    try {
-      // Paginer via ?paged=N
-      for(let page=1; page<=20; page++){
-        const r = await pGetDirect(`${base}/feed/?paged=${page}`);
-        if(!r.ok) break;
-        const text = await r.text();
-        const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)]
-          .map(m=>m[1]).filter(l=>l!==base&&l!==base+'/'&&!l.includes('?feed')&&!l.includes('comments'));
-        if(!links.length) break;
-        allLinks.push(...links);
-        if(allLinks.length >= 500) break;
-      }
-    } catch(e){}
-  }
-
   log(`  → ${allLinks.length} articles trouvés`);
   const results = [];
   for(let i=0; i<allLinks.length; i+=5){
@@ -499,18 +463,12 @@ async function scrapeSitemap(key, src){
   for(const smUrl of (src.sitemaps||[])){
     try {
       const r = await pGet(smUrl, 20000);
-      if(!r.ok){
-        log(`  ⚠️ Sitemap inaccessible (HTTP ${r.status}) : ${smUrl}`);
-        continue;
-      }
+      if(!r.ok) continue;
       const text = await r.text();
       const urls = [...text.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)].map(m=>m[1]);
       allLinks.push(...urls);
       if(allLinks.length>=max) break;
-    } catch(e){
-      log(`  ⚠️ Erreur sitemap : ${e.message}`);
-      continue;
-    }
+    } catch(e){ continue; }
   }
   const limited = allLinks.slice(0,max);
   log(`  → ${limited.length} URLs en sitemap`);
