@@ -1,7 +1,6 @@
 {
   "name": "menu-semaine-functions",
   "version": "1.0.0",
-  "description": "Netlify Functions for Menu de la Semaine",
   "dependencies": {
     "@netlify/blobs": "^8.0.0"
   }
