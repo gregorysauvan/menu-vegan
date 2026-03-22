@@ -246,6 +246,7 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .day-struct-btn.on{background:var(--sage-dark);color:#fff;border-color:var(--sage-dark);}
 .day-struct-btn.soiree-on{background:#9c27b0;color:#fff;border-color:#9c27b0;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div id="cookieBanner" style="display:none">
@@ -680,75 +681,199 @@ function setFirstDay(n){
 }
 
 
-/* ── EXPORT MENU ── */
-function exportMenu(){
+/* ── EXPORT PDF MENU ── */
+async function exportMenu(){
   if(!st.menu.length){ alert('Générez d\'abord un menu.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+
+  const PAGE_W = 210, PAGE_H = 297;
+  const ML = 15, MR = 15, MT = 15, MB = 15;
+  const CW = PAGE_W - ML - MR;
+  let y = MT;
+
+  // Couleurs
+  const COL_HEADER = [74, 110, 80];   // vert sage
+  const COL_TITLE  = [107, 79, 58];   // earth
+  const COL_DAY    = [255, 255, 255]; // blanc
+  const COL_LINK   = [74, 110, 80];   // vert pour les liens
+  const COL_BODY   = [40, 40, 40];
+  const COL_MUTED  = [120, 120, 110];
+  const COL_LIGHT  = [245, 241, 236]; // cream
+  const COL_SOIR   = [123, 31, 162];  // violet soirée
+
+  function checkPage(needed=10){
+    if(y + needed > PAGE_H - MB){
+      doc.addPage();
+      y = MT;
+    }
+  }
+
+  function hLine(col=[200,195,185]){
+    doc.setDrawColor(...col);
+    doc.setLineWidth(0.2);
+    doc.line(ML, y, ML+CW, y);
+    y += 2;
+  }
+
+  // ── EN-TÊTE ──
+  doc.setFillColor(...COL_HEADER);
+  doc.rect(0, 0, PAGE_W, 22, 'F');
+  doc.setTextColor(...COL_DAY);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.text('Menu de la Semaine', ML, 10);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8);
+  doc.text(new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}), ML, 16);
+  doc.text('menu-sur-mesure.netlify.app', PAGE_W - MR, 16, {align:'right'});
+  y = 28;
 
   const MOMENT_ORDER = ['petitdej','dejeuner','gouter','diner'];
   const moments = MOMENT_ORDER.filter(m => st.mealTypes.has(m));
-  const lines = [];
 
-  lines.push('🗓️ MENU DE LA SEMAINE');
-  lines.push('═'.repeat(30));
-  lines.push('');
-
-  st.menu.forEach((day, di) => {
+  // ── JOURS ──
+  for(const [di, day] of st.menu.entries()){
     const isSoir = day.isSoiree || st.soireeDays.has(di);
-    lines.push((isSoir ? '🥂 ' : '📅 ') + day.name.toUpperCase());
-    lines.push('─'.repeat(24));
+    const daySvcs = getDayServices(di);
 
-    for(const mt of moments) {
+    checkPage(20);
+
+    // Header du jour
+    doc.setFillColor(...(isSoir ? COL_SOIR : COL_HEADER));
+    doc.rect(ML, y, CW, 8, 'F');
+    doc.setTextColor(...COL_DAY);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10);
+    doc.text(day.name.toUpperCase(), ML+3, y+5.5);
+    y += 10;
+
+    for(const mt of moments){
       const meal = day.meals[mt];
-      if(!meal || !Object.keys(meal).length) continue;
-      const svcs = getDayServices(di);
-      const mtSvcs = SNACK_MOMENTS.has(mt) ? ['snack'] : svcs;
+      if(!meal) continue;
+      const mtSvcs = SNACK_MOMENTS.has(mt) ? ['snack'] : daySvcs;
       const hasContent = mtSvcs.some(svc => meal[svc]);
       if(!hasContent) continue;
 
-      lines.push('  ' + (MOMENT_LABELS[mt]||mt));
-      for(const svc of mtSvcs) {
+      // Moment (Déjeuner, Dîner…)
+      checkPage(8);
+      doc.setTextColor(...COL_MUTED);
+      doc.setFont('helvetica','italic');
+      doc.setFontSize(7.5);
+      doc.text((MOMENT_LABELS[mt]||mt).toUpperCase(), ML+2, y+4);
+      y += 6;
+
+      for(const svc of mtSvcs){
         const r = meal[svc];
         if(!r) continue;
+
         const label = COURSE_LABELS[svc]||svc;
-        lines.push(`    ${label} : ${r.title}`);
-        if(r.time) lines.push(`    ⏱ ${r.time} min`);
+        checkPage(14);
+
+        // Fond léger pour la recette
+        doc.setFillColor(...COL_LIGHT);
+        doc.rect(ML+2, y, CW-4, 7, 'F');
+
+        // Label service + titre recette (cliquable)
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(7);
+        doc.setTextColor(...COL_MUTED);
+        doc.text(label.toUpperCase(), ML+4, y+4.5);
+
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(...COL_LINK);
+        const titleX = ML + 22;
+        const titleMaxW = CW - 26;
+        const titleLines = doc.splitTextToSize(r.title, titleMaxW);
+        doc.textWithLink(titleLines[0], titleX, y+4.5, { url: r.id || '#' });
+        if(r.time){ 
+          doc.setFont('helvetica','normal');
+          doc.setFontSize(7);
+          doc.setTextColor(...COL_MUTED);
+          doc.text(`⏱ ${r.time} min`, ML+CW-4, y+4.5, {align:'right'});
+        }
+        y += 8;
+
+        // Ingrédients
+        if(r.ings && r.ings.length){
+          checkPage(6);
+          doc.setFont('helvetica','normal');
+          doc.setFontSize(7);
+          doc.setTextColor(...COL_BODY);
+          const ingText = r.ings.slice(0,8).join('  •  ');
+          const ingLines = doc.splitTextToSize(ingText, CW-8);
+          for(const line of ingLines.slice(0,2)){
+            checkPage(5);
+            doc.text(line, ML+4, y+3.5);
+            y += 4.5;
+          }
+        }
+
+        // Étapes résumées (max 2)
+        if(r.steps && r.steps.length){
+          checkPage(5);
+          doc.setTextColor(...COL_MUTED);
+          doc.setFontSize(6.5);
+          const stepsText = r.steps.slice(0,2).map((s,i)=>`${i+1}. ${s}`).join('  ');
+          const stLines = doc.splitTextToSize(stepsText, CW-8);
+          for(const line of stLines.slice(0,2)){
+            checkPage(4);
+            doc.text(line, ML+4, y+3);
+            y += 4;
+          }
+        }
+
+        y += 2;
+        hLine([220,215,205]);
       }
     }
-    lines.push('');
-  });
+    y += 4;
+  }
 
-  // Liste de courses si visible
-  if(st.courses) {
-    lines.push('');
-    lines.push('🛒 LISTE DE COURSES');
-    lines.push('═'.repeat(30));
-    // Récupérer les ingrédients
-    const CAT_KW_KEYS = ['🥬 Légumes frais','🌿 Aromates & Herbes','🧆 Légumineuses & Protéines','🌾 Céréales & Féculents','🥫 Conserves & Sauces','🫙 Épices & Condiments','🛒 Autres'];
+  // ── LISTE DE COURSES (si active) ──
+  if(st.courses){
+    doc.addPage();
+    y = MT;
+    doc.setFillColor(...COL_HEADER);
+    doc.rect(0, 0, PAGE_W, 18, 'F');
+    doc.setTextColor(...COL_DAY);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(13);
+    doc.text('🛒 Liste de courses', ML, 12);
+    y = 24;
+
     const allR = st.menu.flatMap(day => Object.values(day.meals).flatMap(meal => Object.values(meal))).filter(Boolean);
     const seen = new Set();
     const ings = [];
-    allR.forEach(r => r.ings.forEach(ing => {
+    allR.forEach(r => (r.ings||[]).forEach(ing => {
       const cl = ing.replace(/^[\d\s.,/]+\s*(g|kg|ml|cl|l|càs|càc|boîte|bouquet|gousse|branche|filet|sachet|tasse|cup)?\s*/i,'').trim();
-      if(!cl || st.stock.some(s=>cl.toLowerCase().includes(s))) return;
-      if(!seen.has(cl.toLowerCase())) { seen.add(cl.toLowerCase()); ings.push(cl); }
+      if(!cl || (st.stock||[]).some(s=>cl.toLowerCase().includes(s))) return;
+      if(!seen.has(cl.toLowerCase())){ seen.add(cl.toLowerCase()); ings.push(ing); }
     }));
-    ings.forEach(i => lines.push(`  ☐ ${i}`));
+
+    // 2 colonnes
+    const colW = (CW-5)/2;
+    let col = 0;
+    let xBase = ML;
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...COL_BODY);
+    for(const ing of ings){
+      checkPage(6);
+      doc.rect(xBase+1, y+0.5, 2.5, 2.5); // case à cocher
+      const lines = doc.splitTextToSize(ing, colW-7);
+      doc.text(lines[0], xBase+5, y+3);
+      y += 5.5;
+      if(y > PAGE_H - MB - 10 && col === 0){
+        col = 1; xBase = ML + colW + 5; y = 24;
+      }
+    }
   }
 
-  lines.push('');
-  lines.push(`Généré le ${new Date().toLocaleDateString('fr-FR', {weekday:'long',day:'numeric',month:'long',year:'numeric'})}`);
-  lines.push('Menu de la Semaine — menu-sur-mesure.netlify.app');
-
-  const text = lines.join('\n');
-
-  // Créer et télécharger le fichier .txt
-  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `menu-${new Date().toISOString().slice(0,10)}.txt`;
-  a.click();
-  URL.revokeObjectURL(url);
+  // Sauvegarder
+  doc.save(`menu-${new Date().toISOString().slice(0,10)}.pdf`);
 }
 
 
