@@ -285,14 +285,11 @@ header h1 span{color:var(--sage-light);font-style:italic;}
       <div id="loginMsg" style="display:none"></div>
     </div>
     <div class="setup-card">
-      <h2>🌐 Sites de recettes <span style="font-size:.73rem;font-weight:400;color:var(--muted)">(optionnel)</span></h2>
-      <p class="sub">Ajoutez des blogs compatibles (WordPress avec JSON-LD).</p>
-      <ul class="site-list" id="setupSiteList"></ul>
-      <div class="add-row">
-        <input class="add-input" id="setupSiteUrl" type="url" placeholder="https://www.monblog.com">
-        <button class="btn-check" id="btnSetupCheck" onclick="checkSite('setupSiteUrl','btnSetupCheck','setupSiteMsg','setupSiteList')">Vérifier</button>
+      <h2>🌐 Sources de recettes</h2>
+      <p class="sub">Choisissez les sources à inclure dans votre menu.</p>
+      <div id="setupSourceCatalog" style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:.75rem;color:var(--muted)">Chargement…</div>
       </div>
-      <div id="setupSiteMsg" style="margin-top:6px"></div>
     </div>
     <a class="skip-link" onclick="skipSetup()">Continuer sans connexion →</a>
   </div>
@@ -461,9 +458,7 @@ header h1 span{color:var(--sage-light);font-style:italic;}
           <div style="font-size:.75rem;color:var(--muted)">Chargement du catalogue…</div>
         </div>
         <button class="btn-save-reload" onclick="saveAndReload()">✅ Appliquer la sélection</button>
-        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--warm);font-size:.72rem;color:var(--muted)">
-          🛠️ Pour reconstruire la base : <a href="/admin.html" target="_blank" style="color:var(--sage-dark);font-weight:500">ouvrir l'admin →</a>
-        </div>
+
       </div>
 
     </div>
@@ -683,22 +678,26 @@ function setFirstDay(n){
 
 /* ── EXPORT PDF MENU ── */
 async function exportMenu(){
-  if(!st.menu.length){ alert('Generez d\'abord un menu.'); return; }
-
-  if(typeof window.jspdf === 'undefined'){
-    alert('PDF non disponible, rechargez la page.');
-    return;
-  }
+  if(!st.menu.length){ alert("Generez d'abord un menu."); return; }
+  if(typeof window.jspdf === 'undefined'){ alert('PDF non disponible, rechargez la page.'); return; }
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit:'mm', format:'a4' });
-
-  const ML=14, MR=14, MT=14, MB=14;
-  const PW=210, PH=297, CW=210-ML-MR;
+  const ML=14, MR=14, MT=14, MB=14, PW=210, PH=297, CW=182;
   let y = MT;
 
   function newPage(){ doc.addPage(); y = MT; }
   function check(n){ if(y+n > PH-MB) newPage(); }
+
+  // Nettoyer une chaine : retirer les emojis (codepoint > 0x2000)
+  function clean(str){
+    if(!str) return '';
+    let out = '';
+    for(const ch of str){
+      if(ch.codePointAt(0) < 0x2000) out += ch;
+    }
+    return out.trim();
+  }
 
   const MOMENT_ORDER=['petitdej','dejeuner','gouter','diner'];
   const moments=MOMENT_ORDER.filter(m=>st.mealTypes.has(m));
@@ -707,51 +706,40 @@ async function exportMenu(){
   doc.setFillColor(74,110,80);
   doc.rect(0,0,PW,20,'F');
   doc.setTextColor(255,255,255);
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(14);
+  doc.setFont('helvetica','bold'); doc.setFontSize(14);
   doc.text('Menu de la Semaine', ML, 9);
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(8);
-  doc.text(new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}), ML, 15);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.text(new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}), ML, 16);
   y = 26;
 
   for(const [di,day] of st.menu.entries()){
     const isSoir = day.isSoiree || st.soireeDays.has(di);
     const daySvcs = getDayServices(di);
-
     check(12);
+
     // Bandeau jour
-    const dayColor = isSoir ? [123,31,162] : [74,110,80];
-    doc.setFillColor(...dayColor);
+    doc.setFillColor(...(isSoir ? [123,31,162] : [74,110,80]));
     doc.rect(ML, y, CW, 7, 'F');
     doc.setTextColor(255,255,255);
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(9);
-    // Nettoyer le nom du jour (retirer emojis)
-    const dayName = day.name.replace(/[^ -À-ÿ ]/g,'').trim();
-    doc.text(dayName.toUpperCase(), ML+2, y+5);
+    doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text(clean(day.name).toUpperCase(), ML+2, y+5);
     y += 9;
 
     for(const mt of moments){
       const meal = day.meals[mt];
       if(!meal) continue;
       const mtSvcs = SNACK_MOMENTS.has(mt)?['snack']:daySvcs;
-      const hasContent = mtSvcs.some(svc=>meal[svc]);
-      if(!hasContent) continue;
+      if(!mtSvcs.some(svc=>meal[svc])) continue;
 
-      // Label moment
       check(6);
-      doc.setFont('helvetica','italic');
-      doc.setFontSize(7);
+      doc.setFont('helvetica','italic'); doc.setFontSize(7);
       doc.setTextColor(140,134,120);
-      doc.text((MOMENT_LABELS[mt]||mt).toUpperCase(), ML+2, y+4);
+      doc.text(clean(MOMENT_LABELS[mt]||mt).toUpperCase(), ML+2, y+4);
       y += 6;
 
       for(const svc of mtSvcs){
         const r = meal[svc];
         if(!r) continue;
-        const label = COURSE_LABELS[svc]||svc;
-
         check(16);
 
         // Fond recette
@@ -759,28 +747,21 @@ async function exportMenu(){
         doc.rect(ML+1, y, CW-2, 7, 'F');
 
         // Label service
-        doc.setFont('helvetica','bold');
-        doc.setFontSize(6.5);
+        doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
         doc.setTextColor(140,134,120);
-        doc.text(label.toUpperCase(), ML+3, y+4.5);
+        doc.text(clean(COURSE_LABELS[svc]||svc).toUpperCase(), ML+3, y+4.5);
 
-        // Titre recette (lien cliquable)
-        doc.setFont('helvetica','bold');
-        doc.setFontSize(8);
+        // Titre (lien)
+        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
         doc.setTextColor(74,110,80);
-        const titleMaxW = CW - 28;
-        const titleStr = r.title || '';
-        const titleLines = doc.splitTextToSize(titleStr, titleMaxW);
-        if(r.id){
-          doc.textWithLink(titleLines[0], ML+22, y+4.5, { url: r.id });
-        } else {
-          doc.text(titleLines[0], ML+22, y+4.5);
-        }
+        const title = clean(r.title||'');
+        const titleLines = doc.splitTextToSize(title, CW-28);
+        if(r.id){ doc.textWithLink(titleLines[0]||title, ML+22, y+4.5, {url:r.id}); }
+        else { doc.text(titleLines[0]||title, ML+22, y+4.5); }
 
         // Temps
         if(r.time){
-          doc.setFont('helvetica','normal');
-          doc.setFontSize(6.5);
+          doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
           doc.setTextColor(140,134,120);
           doc.text(r.time+' min', ML+CW-2, y+4.5, {align:'right'});
         }
@@ -789,37 +770,29 @@ async function exportMenu(){
         // Ingredients
         if(r.ings && r.ings.length){
           check(5);
-          doc.setFont('helvetica','normal');
-          doc.setFontSize(7);
+          doc.setFont('helvetica','normal'); doc.setFontSize(7);
           doc.setTextColor(50,50,40);
-          const ingStr = r.ings.slice(0,8).join(' - ');
+          const ingStr = r.ings.slice(0,8).map(clean).join(' - ');
           const ingLines = doc.splitTextToSize(ingStr, CW-6);
           for(const line of ingLines.slice(0,2)){
-            check(5);
-            doc.text(line, ML+3, y+3.5);
-            y += 4.5;
+            check(5); doc.text(line, ML+3, y+3.5); y += 4.5;
           }
         }
 
-        // Etapes (max 2)
+        // Etapes
         if(r.steps && r.steps.length){
-          check(5);
-          doc.setFont('helvetica','normal');
-          doc.setFontSize(6.5);
+          doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
           doc.setTextColor(120,114,100);
           for(const [si,step] of r.steps.slice(0,2).entries()){
-            const stepLines = doc.splitTextToSize((si+1)+'. '+step, CW-6);
+            const stepLines = doc.splitTextToSize((si+1)+'. '+clean(step), CW-6);
             for(const line of stepLines.slice(0,1)){
-              check(4);
-              doc.text(line, ML+3, y+3);
-              y += 4;
+              check(4); doc.text(line, ML+3, y+3); y += 4;
             }
           }
         }
 
         y += 2;
-        doc.setDrawColor(210,205,195);
-        doc.setLineWidth(0.15);
+        doc.setDrawColor(210,205,195); doc.setLineWidth(0.15);
         doc.line(ML+1, y, ML+CW-1, y);
         y += 2;
       }
@@ -833,8 +806,7 @@ async function exportMenu(){
     doc.setFillColor(74,110,80);
     doc.rect(0,0,PW,18,'F');
     doc.setTextColor(255,255,255);
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(13);
+    doc.setFont('helvetica','bold'); doc.setFontSize(13);
     doc.text('Liste de courses', ML, 12);
     y = 24;
 
@@ -842,25 +814,22 @@ async function exportMenu(){
     const seen = new Set();
     const ings = [];
     allR.forEach(r=>(r.ings||[]).forEach(ing=>{
-      const cl = ing.replace(/^[\d\s.,\/]+(g|kg|ml|cl|l|c.s|c.c)?\s*/i,'').trim();
+      const cl = clean(ing).replace(/^\d[\d\s.,\/]*\s*\w{0,3}\s*/,'').trim();
       if(!cl||(st.stock||[]).some(s=>cl.toLowerCase().includes(s))) return;
-      if(!seen.has(cl.toLowerCase())){ seen.add(cl.toLowerCase()); ings.push(ing); }
+      if(!seen.has(cl.toLowerCase())){ seen.add(cl.toLowerCase()); ings.push(clean(ing)); }
     }));
 
-    const colW = (CW-4)/2;
+    const colW=(CW-4)/2;
     let col=0, xBase=ML;
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(8);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
     doc.setTextColor(40,40,35);
-
     for(const ing of ings){
       if(y > PH-MB-8){
         if(col===0){ col=1; xBase=ML+colW+4; y=24; }
-        else { newPage(); col=0; xBase=ML; }
+        else{ newPage(); col=0; xBase=ML; }
       }
       doc.rect(xBase+1, y+0.5, 2.5, 2.5);
-      const lines = doc.splitTextToSize(ing, colW-7);
-      doc.text(lines[0], xBase+5, y+3);
+      doc.text(doc.splitTextToSize(ing, colW-7)[0], xBase+5, y+3);
       y += 5.5;
     }
   }
@@ -872,7 +841,7 @@ async function exportMenu(){
 async function init(){
   if(!getCookie('menuCookieOk'))document.getElementById('cookieBanner').style.display='flex';
   const cfg=loadCfg();if(cfg){st.token=cfg.token||null;st.sites=cfg.sites||[];st.activeSources=cfg.activeSources||[];}
-  if(!cfg||!st.token){document.getElementById('setupScreen').style.display='block';setEl('headerSub','textContent','Configuration');renderSiteList('setupSiteList');return;}
+  if(!cfg||!st.token){document.getElementById('setupScreen').style.display='block';setEl('headerSub','textContent','Configuration');loadCatalog();return;}
   startLoading();
 }
 
@@ -1125,7 +1094,32 @@ init();
 /* ── CATALOGUE DES SOURCES ── */
 let sourceCatalogData={};
 async function loadSourceCatalog(){try{const r=await fetch('/.netlify/functions/rebuild-db?action=list');if(!r.ok)return;sourceCatalogData=await r.json();renderSourceCatalog();}catch(e){console.warn('Catalog:',e);}}
-function renderSourceCatalog(){const el=document.getElementById('sourceCatalog');if(!el)return;const BADGES={vegan:'badge-vegan',healthy:'badge-healthy',bio:'badge-bio',general:'badge-general'};const LABELS={vegan:'Vegan',healthy:'Healthy',bio:'Bio',general:'Général'};el.innerHTML=Object.entries(sourceCatalogData).map(([key,src])=>{const active=(st.activeSources||[]).includes(key);const age=src.updatedAt?Math.round((Date.now()-src.updatedAt)/86400000):null;const ageTxt=age===null?'⚠️ non indexé':age===0?"aujourd'hui":`il y a ${age}j`;const badge=BADGES[src.specialty]||'badge-general';const label=LABELS[src.specialty]||src.specialty;return `<div class="source-item${active?' active':''}" data-src="${key}" onclick="toggleSource('${key}')"><span class="source-icon">${src.icon||'🌐'}</span><div class="source-info"><div class="source-name">${src.name}</div><div class="source-meta">${src.cached?src.count.toLocaleString('fr')+' recettes · '+ageTxt:'⚠️ pas encore indexé'}</div></div><span class="source-badge ${badge}">${label}</span><div class="source-toggle"></div></div>`;}).join('');}
+function renderSourceCatalog(){
+  ['sourceCatalog','setupSourceCatalog'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el) return;
+    var BADGES={vegan:'badge-vegan',healthy:'badge-healthy',bio:'badge-bio',general:'badge-general'};
+    var LABELS={vegan:'Vegan',healthy:'Healthy',bio:'Bio',general:'General'};
+    var html='';
+    Object.entries(sourceCatalogData).forEach(function(entry){
+      var key=entry[0], src=entry[1];
+      var active=(st.activeSources||[]).includes(key);
+      var age=src.updatedAt?Math.round((Date.now()-src.updatedAt)/86400000):null;
+      var ageTxt=age===null?'non indexe':age===0?"aujourd'hui":'il y a '+age+'j';
+      var badge=BADGES[src.specialty]||'badge-general';
+      var label=LABELS[src.specialty]||src.specialty;
+      var countTxt=src.cached?(src.count.toLocaleString('fr')+' recettes - '+ageTxt):'pas encore indexe';
+      html+='<div class="source-item'+(active?' active':'')+'" data-src="'+key+'" onclick="toggleSource(this.dataset.src)">';
+      html+='<span class="source-icon">'+(src.icon||'')+'</span>';
+      html+='<div class="source-info"><div class="source-name">'+src.name+'</div>';
+      html+='<div class="source-meta">'+countTxt+'</div></div>';
+      html+='<span class="source-badge '+badge+'">'+label+'</span>';
+      html+='<div class="source-toggle"></div></div>';
+    });
+    el.innerHTML=html;
+  });
+}
+
 function toggleSource(key){if(!st.activeSources)st.activeSources=[];const idx=st.activeSources.indexOf(key);if(idx>=0)st.activeSources.splice(idx,1);else st.activeSources.push(key);renderSourceCatalog();saveCfg();}
 
 </script>
