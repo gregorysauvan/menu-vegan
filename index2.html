@@ -683,197 +683,189 @@ function setFirstDay(n){
 
 /* ── EXPORT PDF MENU ── */
 async function exportMenu(){
-  if(!st.menu.length){ alert('Générez d\'abord un menu.'); return; }
+  if(!st.menu.length){ alert('Generez d\'abord un menu.'); return; }
+
+  if(typeof window.jspdf === 'undefined'){
+    alert('PDF non disponible, rechargez la page.');
+    return;
+  }
 
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+  const doc = new jsPDF({ unit:'mm', format:'a4' });
 
-  const PAGE_W = 210, PAGE_H = 297;
-  const ML = 15, MR = 15, MT = 15, MB = 15;
-  const CW = PAGE_W - ML - MR;
+  const ML=14, MR=14, MT=14, MB=14;
+  const PW=210, PH=297, CW=210-ML-MR;
   let y = MT;
 
-  // Couleurs
-  const COL_HEADER = [74, 110, 80];   // vert sage
-  const COL_TITLE  = [107, 79, 58];   // earth
-  const COL_DAY    = [255, 255, 255]; // blanc
-  const COL_LINK   = [74, 110, 80];   // vert pour les liens
-  const COL_BODY   = [40, 40, 40];
-  const COL_MUTED  = [120, 120, 110];
-  const COL_LIGHT  = [245, 241, 236]; // cream
-  const COL_SOIR   = [123, 31, 162];  // violet soirée
+  function newPage(){ doc.addPage(); y = MT; }
+  function check(n){ if(y+n > PH-MB) newPage(); }
 
-  function checkPage(needed=10){
-    if(y + needed > PAGE_H - MB){
-      doc.addPage();
-      y = MT;
-    }
-  }
+  const MOMENT_ORDER=['petitdej','dejeuner','gouter','diner'];
+  const moments=MOMENT_ORDER.filter(m=>st.mealTypes.has(m));
 
-  function hLine(col=[200,195,185]){
-    doc.setDrawColor(...col);
-    doc.setLineWidth(0.2);
-    doc.line(ML, y, ML+CW, y);
-    y += 2;
-  }
-
-  // ── EN-TÊTE ──
-  doc.setFillColor(...COL_HEADER);
-  doc.rect(0, 0, PAGE_W, 22, 'F');
-  doc.setTextColor(...COL_DAY);
+  // En-tete
+  doc.setFillColor(74,110,80);
+  doc.rect(0,0,PW,20,'F');
+  doc.setTextColor(255,255,255);
   doc.setFont('helvetica','bold');
-  doc.setFontSize(16);
-  doc.text('Menu de la Semaine', ML, 10);
+  doc.setFontSize(14);
+  doc.text('Menu de la Semaine', ML, 9);
   doc.setFont('helvetica','normal');
   doc.setFontSize(8);
-  doc.text(new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}), ML, 16);
-  doc.text('menu-sur-mesure.netlify.app', PAGE_W - MR, 16, {align:'right'});
-  y = 28;
+  doc.text(new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}), ML, 15);
+  y = 26;
 
-  const MOMENT_ORDER = ['petitdej','dejeuner','gouter','diner'];
-  const moments = MOMENT_ORDER.filter(m => st.mealTypes.has(m));
-
-  // ── JOURS ──
-  for(const [di, day] of st.menu.entries()){
+  for(const [di,day] of st.menu.entries()){
     const isSoir = day.isSoiree || st.soireeDays.has(di);
     const daySvcs = getDayServices(di);
 
-    checkPage(20);
-
-    // Header du jour
-    doc.setFillColor(...(isSoir ? COL_SOIR : COL_HEADER));
-    doc.rect(ML, y, CW, 8, 'F');
-    doc.setTextColor(...COL_DAY);
+    check(12);
+    // Bandeau jour
+    const dayColor = isSoir ? [123,31,162] : [74,110,80];
+    doc.setFillColor(...dayColor);
+    doc.rect(ML, y, CW, 7, 'F');
+    doc.setTextColor(255,255,255);
     doc.setFont('helvetica','bold');
-    doc.setFontSize(10);
-    doc.text(day.name.toUpperCase(), ML+3, y+5.5);
-    y += 10;
+    doc.setFontSize(9);
+    // Nettoyer le nom du jour (retirer emojis)
+    const dayName = day.name.replace(/[^ -À-ÿ ]/g,'').trim();
+    doc.text(dayName.toUpperCase(), ML+2, y+5);
+    y += 9;
 
     for(const mt of moments){
       const meal = day.meals[mt];
       if(!meal) continue;
-      const mtSvcs = SNACK_MOMENTS.has(mt) ? ['snack'] : daySvcs;
-      const hasContent = mtSvcs.some(svc => meal[svc]);
+      const mtSvcs = SNACK_MOMENTS.has(mt)?['snack']:daySvcs;
+      const hasContent = mtSvcs.some(svc=>meal[svc]);
       if(!hasContent) continue;
 
-      // Moment (Déjeuner, Dîner…)
-      checkPage(8);
-      doc.setTextColor(...COL_MUTED);
+      // Label moment
+      check(6);
       doc.setFont('helvetica','italic');
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
+      doc.setTextColor(140,134,120);
       doc.text((MOMENT_LABELS[mt]||mt).toUpperCase(), ML+2, y+4);
       y += 6;
 
       for(const svc of mtSvcs){
         const r = meal[svc];
         if(!r) continue;
-
         const label = COURSE_LABELS[svc]||svc;
-        checkPage(14);
 
-        // Fond léger pour la recette
-        doc.setFillColor(...COL_LIGHT);
-        doc.rect(ML+2, y, CW-4, 7, 'F');
+        check(16);
 
-        // Label service + titre recette (cliquable)
+        // Fond recette
+        doc.setFillColor(247,243,236);
+        doc.rect(ML+1, y, CW-2, 7, 'F');
+
+        // Label service
         doc.setFont('helvetica','bold');
-        doc.setFontSize(7);
-        doc.setTextColor(...COL_MUTED);
-        doc.text(label.toUpperCase(), ML+4, y+4.5);
+        doc.setFontSize(6.5);
+        doc.setTextColor(140,134,120);
+        doc.text(label.toUpperCase(), ML+3, y+4.5);
 
+        // Titre recette (lien cliquable)
         doc.setFont('helvetica','bold');
-        doc.setFontSize(8.5);
-        doc.setTextColor(...COL_LINK);
-        const titleX = ML + 22;
-        const titleMaxW = CW - 26;
-        const titleLines = doc.splitTextToSize(r.title, titleMaxW);
-        doc.textWithLink(titleLines[0], titleX, y+4.5, { url: r.id || '#' });
-        if(r.time){ 
+        doc.setFontSize(8);
+        doc.setTextColor(74,110,80);
+        const titleMaxW = CW - 28;
+        const titleStr = r.title || '';
+        const titleLines = doc.splitTextToSize(titleStr, titleMaxW);
+        if(r.id){
+          doc.textWithLink(titleLines[0], ML+22, y+4.5, { url: r.id });
+        } else {
+          doc.text(titleLines[0], ML+22, y+4.5);
+        }
+
+        // Temps
+        if(r.time){
           doc.setFont('helvetica','normal');
-          doc.setFontSize(7);
-          doc.setTextColor(...COL_MUTED);
-          doc.text(`⏱ ${r.time} min`, ML+CW-4, y+4.5, {align:'right'});
+          doc.setFontSize(6.5);
+          doc.setTextColor(140,134,120);
+          doc.text(r.time+' min', ML+CW-2, y+4.5, {align:'right'});
         }
         y += 8;
 
-        // Ingrédients
+        // Ingredients
         if(r.ings && r.ings.length){
-          checkPage(6);
+          check(5);
           doc.setFont('helvetica','normal');
           doc.setFontSize(7);
-          doc.setTextColor(...COL_BODY);
-          const ingText = r.ings.slice(0,8).join('  •  ');
-          const ingLines = doc.splitTextToSize(ingText, CW-8);
+          doc.setTextColor(50,50,40);
+          const ingStr = r.ings.slice(0,8).join(' - ');
+          const ingLines = doc.splitTextToSize(ingStr, CW-6);
           for(const line of ingLines.slice(0,2)){
-            checkPage(5);
-            doc.text(line, ML+4, y+3.5);
+            check(5);
+            doc.text(line, ML+3, y+3.5);
             y += 4.5;
           }
         }
 
-        // Étapes résumées (max 2)
+        // Etapes (max 2)
         if(r.steps && r.steps.length){
-          checkPage(5);
-          doc.setTextColor(...COL_MUTED);
+          check(5);
+          doc.setFont('helvetica','normal');
           doc.setFontSize(6.5);
-          const stepsText = r.steps.slice(0,2).map((s,i)=>`${i+1}. ${s}`).join('  ');
-          const stLines = doc.splitTextToSize(stepsText, CW-8);
-          for(const line of stLines.slice(0,2)){
-            checkPage(4);
-            doc.text(line, ML+4, y+3);
-            y += 4;
+          doc.setTextColor(120,114,100);
+          for(const [si,step] of r.steps.slice(0,2).entries()){
+            const stepLines = doc.splitTextToSize((si+1)+'. '+step, CW-6);
+            for(const line of stepLines.slice(0,1)){
+              check(4);
+              doc.text(line, ML+3, y+3);
+              y += 4;
+            }
           }
         }
 
         y += 2;
-        hLine([220,215,205]);
+        doc.setDrawColor(210,205,195);
+        doc.setLineWidth(0.15);
+        doc.line(ML+1, y, ML+CW-1, y);
+        y += 2;
       }
     }
-    y += 4;
+    y += 3;
   }
 
-  // ── LISTE DE COURSES (si active) ──
+  // Liste de courses
   if(st.courses){
-    doc.addPage();
-    y = MT;
-    doc.setFillColor(...COL_HEADER);
-    doc.rect(0, 0, PAGE_W, 18, 'F');
-    doc.setTextColor(...COL_DAY);
+    newPage();
+    doc.setFillColor(74,110,80);
+    doc.rect(0,0,PW,18,'F');
+    doc.setTextColor(255,255,255);
     doc.setFont('helvetica','bold');
     doc.setFontSize(13);
-    doc.text('🛒 Liste de courses', ML, 12);
+    doc.text('Liste de courses', ML, 12);
     y = 24;
 
-    const allR = st.menu.flatMap(day => Object.values(day.meals).flatMap(meal => Object.values(meal))).filter(Boolean);
+    const allR = st.menu.flatMap(d=>Object.values(d.meals).flatMap(m=>Object.values(m))).filter(Boolean);
     const seen = new Set();
     const ings = [];
-    allR.forEach(r => (r.ings||[]).forEach(ing => {
-      const cl = ing.replace(/^[\d\s.,/]+\s*(g|kg|ml|cl|l|càs|càc|boîte|bouquet|gousse|branche|filet|sachet|tasse|cup)?\s*/i,'').trim();
-      if(!cl || (st.stock||[]).some(s=>cl.toLowerCase().includes(s))) return;
+    allR.forEach(r=>(r.ings||[]).forEach(ing=>{
+      const cl = ing.replace(/^[\d\s.,\/]+(g|kg|ml|cl|l|c.s|c.c)?\s*/i,'').trim();
+      if(!cl||(st.stock||[]).some(s=>cl.toLowerCase().includes(s))) return;
       if(!seen.has(cl.toLowerCase())){ seen.add(cl.toLowerCase()); ings.push(ing); }
     }));
 
-    // 2 colonnes
-    const colW = (CW-5)/2;
-    let col = 0;
-    let xBase = ML;
+    const colW = (CW-4)/2;
+    let col=0, xBase=ML;
     doc.setFont('helvetica','normal');
     doc.setFontSize(8);
-    doc.setTextColor(...COL_BODY);
+    doc.setTextColor(40,40,35);
+
     for(const ing of ings){
-      checkPage(6);
-      doc.rect(xBase+1, y+0.5, 2.5, 2.5); // case à cocher
+      if(y > PH-MB-8){
+        if(col===0){ col=1; xBase=ML+colW+4; y=24; }
+        else { newPage(); col=0; xBase=ML; }
+      }
+      doc.rect(xBase+1, y+0.5, 2.5, 2.5);
       const lines = doc.splitTextToSize(ing, colW-7);
       doc.text(lines[0], xBase+5, y+3);
       y += 5.5;
-      if(y > PAGE_H - MB - 10 && col === 0){
-        col = 1; xBase = ML + colW + 5; y = 24;
-      }
     }
   }
 
-  // Sauvegarder
-  doc.save(`menu-${new Date().toISOString().slice(0,10)}.pdf`);
+  doc.save('menu-'+new Date().toISOString().slice(0,10)+'.pdf');
 }
 
 
