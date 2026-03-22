@@ -2,6 +2,7 @@
   "name": "menu-semaine",
   "version": "1.0.0",
   "dependencies": {
-    "@netlify/blobs": "^8.0.0"
+    "@netlify/blobs": "^8.0.0",
+    "marmiton-api": "^3.0.0"
   }
 }

@@ -343,6 +343,7 @@ async function rebuildOne(key){
     if(src.type==='wordpress')      recipes = await scrapeWordpress(key, src);
     else if(src.type==='blogger')   recipes = await scrapeBlogger(key, src);
     else if(src.type==='sitemap')   recipes = await scrapeSitemap(key, src);
+    else if(src.type==='marmiton')  recipes = await scrapeMarmiton(key, src);
 
     log(`  → ${recipes.length} recettes scrapées, envoi au serveur…`);
     const res = await saveToBlobs(key, recipes);
@@ -384,6 +385,26 @@ function setCardStatus(key, type, txt){
 
 // Init si déjà connecté
 if(sessionStorage.getItem('adminOk')==='1') initAdmin();
+
+// ── MARMITON VIA FONCTION NETLIFY ────────────────────────────────
+async function scrapeMarmiton(key, src) {
+  // On envoie les queries à la fonction serveur qui utilise marmiton-api
+  const queries = src._queries || null; // null = utiliser les DEFAULT_QUERIES de la fonction
+  log('  → Appel de la fonction marmiton-scraper…');
+  const r = await fetch('/.netlify/functions/marmiton-scraper', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(queries ? { queries } : {}),
+    signal: AbortSignal.timeout(300000), // 5 min max
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const data = await r.json();
+  if (data.errors && data.errors.length) {
+    data.errors.forEach(e => log('  ⚠️ ' + e));
+  }
+  log(`  → ${data.count} recettes récupérées depuis Marmiton`);
+  return data.recipes || [];
+}
 </script>
 </body>
 </html>
