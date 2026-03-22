@@ -1,6 +1,6 @@
 import { getStore } from '@netlify/blobs';
 
-const TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
 
 export default async (req, context) => {
   const url = new URL(req.url);
@@ -11,6 +11,7 @@ export default async (req, context) => {
   const store = getStore('pages-cache');
   const cacheKey = 'p-' + Buffer.from(targetUrl).toString('base64').replace(/[^a-z0-9]/gi, '').slice(0, 60);
 
+  // Lire le cache sauf si force=1
   if (!force) {
     try {
       const cached = await store.get(cacheKey, { type: 'json' });
@@ -31,7 +32,7 @@ export default async (req, context) => {
   try {
     const res = await fetch(targetUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml,application/json,*/*',
         'Accept-Language': 'fr-FR,fr;q=0.9',
       },
@@ -43,7 +44,8 @@ export default async (req, context) => {
     const wpTotal = res.headers.get('X-WP-Total') || '';
     const wpPages = res.headers.get('X-WP-TotalPages') || '';
 
-    if (body.length < 2 * 1024 * 1024) {
+    // Mettre en cache uniquement si le body contient du contenu utile
+    if (body.length > 500) {
       try {
         await store.setJSON(cacheKey, { ts: Date.now(), body, ct, status: res.status, wpTotal, wpPages });
       } catch (e) {}
