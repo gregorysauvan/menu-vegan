@@ -396,53 +396,82 @@ function setCardStatus(key, type, txt){
 // Init si déjà connecté
 if(sessionStorage.getItem('adminOk')==='1') initAdmin();
 
-// ── MARMITON — BACKGROUND FUNCTION + POLLING ─────────────────────
+// ── MARMITON — APPEL DIRECT BACKGROUND FUNCTION + POLLING ────────
 async function scrapeMarmiton(key, src) {
   log('  → Lancement du scraping Marmiton en arrière-plan…');
 
-  // 1. Déclencher la background function (retourne 202 immédiatement)
-  const r = await fetch('/.netlify/functions/marmiton-scraper', {
-    method: 'POST',
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!r.ok && r.status !== 202) throw new Error(`Lancement échoué HTTP ${r.status}`);
-  log('  → Scraping démarré (peut prendre 5-10 min)…');
+  // 1. Appeler directement la background function
+  //    Elle retourne 202 immédiatement et tourne jusqu'à 15 min côté serveur
+  let launched = false;
+  try {
+    const r = await fetch('/.netlify/functions/marmiton-scraper-background', {
+      method: 'POST',
+      signal: AbortSignal.timeout(10000),
+    });
+    // 202 = accepté, la fonction tourne en arrière-plan
+    if (r.status === 202 || r.ok) {
+      launched = true;
+      log('  → Scraping lancé côté serveur (5-12 min selon Marmiton)…');
+    } else {
+      throw new Error(`HTTP ${r.status}`);
+    }
+  } catch(e) {
+    throw new Error(`Impossible de lancer le scraping : ${e.message}`);
+  }
 
-  // 2. Polling toutes les 8 secondes jusqu'à statut 'done' ou 'error'
-  let lastCount = 0;
-  for (let attempt = 0; attempt < 120; attempt++) { // 120 × 8s = 16 min max
-    await new Promise(res => setTimeout(res, 8000));
+  // 2. Poll le catalogue (rebuild-db?action=list) toutes les 10 secondes
+  //    On y lit src-meta-marmiton.status
+  let lastProgress = -1;
+  for (let attempt = 0; attempt < 100; attempt++) { // 100 × 10s = ~17 min
+    await new Promise(res => setTimeout(res, 10000));
+
     try {
-      const sr = await fetch('/.netlify/functions/marmiton-scraper');
-      const meta = await sr.json();
+      const r = await fetch('/.netlify/functions/rebuild-db?action=list');
+      if (!r.ok) continue;
+      const catalog = await r.json();
+      const meta = catalog['marmiton'];
 
-      if (meta.status === 'done') {
-        log(`  → ✅ Terminé ! ${meta.count} recettes`);
-        // Récupérer les recettes depuis les Blobs via rebuild-db?action=get
-        const dr = await fetch('/.netlify/functions/rebuild-db?action=get&source=marmiton');
-        if (!dr.ok) throw new Error('Impossible de lire les recettes depuis les Blobs');
-        return await dr.json();
-      }
+      if (!meta) continue;
 
-      if (meta.status === 'error') {
-        throw new Error(meta.error || 'Erreur inconnue côté serveur');
-      }
-
-      if (meta.status === 'running') {
-        const pct = meta.progress ? ` (${meta.progress}%)` : '';
-        const cnt = meta.count || 0;
-        if (cnt !== lastCount) {
-          log(`  → En cours${pct} — ${cnt} recettes collectées…`);
-          lastCount = cnt;
+      // Terminé !
+      if (meta.cached && meta.count > 0 && meta.updatedAt) {
+        const age = Date.now() - meta.updatedAt;
+        // Si updatedAt est récent (< 20 min), c'est notre run
+        if (age < 20 * 60 * 1000) {
+          log(`  → ✅ Terminé ! ${meta.count} recettes indexées.`);
+          // Récupérer les recettes
+          const dr = await fetch('/.netlify/functions/rebuild-db?action=get&source=marmiton');
+          if (!dr.ok) throw new Error('Lecture Blobs échouée');
+          return await dr.json();
         }
       }
+
+      // En cours — afficher la progression si elle change
+      const pct = meta.progress ?? 0;
+      const cnt = meta.count ?? 0;
+      if (pct !== lastProgress) {
+        log(`  → En cours ${pct}% — ${cnt} recettes…`);
+        lastProgress = pct;
+      }
+
     } catch(e) {
-      // Erreur réseau temporaire → on continue le polling
-      log(`  ⚠️ Poll erreur : ${e.message} — on continue…`);
+      log(`  ⚠️ Poll : ${e.message}`);
     }
   }
 
-  throw new Error('Timeout : le scraping a pris trop longtemps (>16 min)');
+  // Si on sort de la boucle sans résultat, vérifier une dernière fois
+  try {
+    const dr = await fetch('/.netlify/functions/rebuild-db?action=get&source=marmiton');
+    if (dr.ok) {
+      const data = await dr.json();
+      if (data && data.length > 0) {
+        log(`  → ✅ Récupéré en fin de boucle : ${data.length} recettes.`);
+        return data;
+      }
+    }
+  } catch(e) {}
+
+  throw new Error('Scraping trop long ou non terminé. Vérifie les logs Netlify puis relance.');
 }
 </script>
 </body>
