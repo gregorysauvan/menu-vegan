@@ -343,7 +343,17 @@ async function rebuildOne(key){
     if(src.type==='wordpress')      recipes = await scrapeWordpress(key, src);
     else if(src.type==='blogger')   recipes = await scrapeBlogger(key, src);
     else if(src.type==='sitemap')   recipes = await scrapeSitemap(key, src);
-    else if(src.type==='marmiton')  recipes = await scrapeMarmiton(key, src);
+    else if(src.type==='marmiton') {
+      // Marmiton : la background function sauvegarde elle-même dans les Blobs
+      // scrapeMarmiton retourne directement les recettes déjà stockées
+      recipes = await scrapeMarmiton(key, src);
+      const count = recipes.length;
+      log(`  ✅ ${src.name} : ${count} recettes disponibles.`);
+      setCardStatus(key, 'ok', `✅ ${count.toLocaleString('fr')} recettes · aujourd'hui`);
+      catalog[key] = {...catalog[key], cached:true, count, updatedAt:Date.now()};
+      // Pas de saveToBlobs pour Marmiton, déjà fait côté serveur
+      busy = false; setAllBtns(false); return;
+    }
 
     log(`  → ${recipes.length} recettes scrapées, envoi au serveur…`);
     const res = await saveToBlobs(key, recipes);
@@ -386,24 +396,53 @@ function setCardStatus(key, type, txt){
 // Init si déjà connecté
 if(sessionStorage.getItem('adminOk')==='1') initAdmin();
 
-// ── MARMITON VIA FONCTION NETLIFY ────────────────────────────────
+// ── MARMITON — BACKGROUND FUNCTION + POLLING ─────────────────────
 async function scrapeMarmiton(key, src) {
-  // On envoie les queries à la fonction serveur qui utilise marmiton-api
-  const queries = src._queries || null; // null = utiliser les DEFAULT_QUERIES de la fonction
-  log('  → Appel de la fonction marmiton-scraper…');
+  log('  → Lancement du scraping Marmiton en arrière-plan…');
+
+  // 1. Déclencher la background function (retourne 202 immédiatement)
   const r = await fetch('/.netlify/functions/marmiton-scraper', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(queries ? { queries } : {}),
-    signal: AbortSignal.timeout(300000), // 5 min max
+    signal: AbortSignal.timeout(10000),
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const data = await r.json();
-  if (data.errors && data.errors.length) {
-    data.errors.forEach(e => log('  ⚠️ ' + e));
+  if (!r.ok && r.status !== 202) throw new Error(`Lancement échoué HTTP ${r.status}`);
+  log('  → Scraping démarré (peut prendre 5-10 min)…');
+
+  // 2. Polling toutes les 8 secondes jusqu'à statut 'done' ou 'error'
+  let lastCount = 0;
+  for (let attempt = 0; attempt < 120; attempt++) { // 120 × 8s = 16 min max
+    await new Promise(res => setTimeout(res, 8000));
+    try {
+      const sr = await fetch('/.netlify/functions/marmiton-scraper');
+      const meta = await sr.json();
+
+      if (meta.status === 'done') {
+        log(`  → ✅ Terminé ! ${meta.count} recettes`);
+        // Récupérer les recettes depuis les Blobs via rebuild-db?action=get
+        const dr = await fetch('/.netlify/functions/rebuild-db?action=get&source=marmiton');
+        if (!dr.ok) throw new Error('Impossible de lire les recettes depuis les Blobs');
+        return await dr.json();
+      }
+
+      if (meta.status === 'error') {
+        throw new Error(meta.error || 'Erreur inconnue côté serveur');
+      }
+
+      if (meta.status === 'running') {
+        const pct = meta.progress ? ` (${meta.progress}%)` : '';
+        const cnt = meta.count || 0;
+        if (cnt !== lastCount) {
+          log(`  → En cours${pct} — ${cnt} recettes collectées…`);
+          lastCount = cnt;
+        }
+      }
+    } catch(e) {
+      // Erreur réseau temporaire → on continue le polling
+      log(`  ⚠️ Poll erreur : ${e.message} — on continue…`);
+    }
   }
-  log(`  → ${data.count} recettes récupérées depuis Marmiton`);
-  return data.recipes || [];
+
+  throw new Error('Timeout : le scraping a pris trop longtemps (>16 min)');
 }
 </script>
 </body>
