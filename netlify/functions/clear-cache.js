@@ -1,21 +1,30 @@
 import { getStore } from '@netlify/blobs';
 
 export default async (req, context) => {
-  const url = new URL(req.url);
-  const prefix = url.searchParams.get('prefix') || ''; // optionnel : filtrer par préfixe
+  try {
+    const store = getStore('pages-cache');
+    let deleted = 0;
 
-  const store = getStore('pages-cache');
-  const { blobs } = await store.list(prefix ? { prefix } : undefined);
+    try {
+      const result = await store.list();
+      const blobs = result?.blobs || [];
+      for (const blob of blobs) {
+        try { await store.delete(blob.key); deleted++; } catch(e) {}
+      }
+    } catch(e) {
+      return new Response(JSON.stringify({ ok: false, error: 'list failed: ' + String(e) }), {
+        status: 200, headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
-  let deleted = 0;
-  for (const blob of blobs) {
-    await store.delete(blob.key);
-    deleted++;
+    return new Response(JSON.stringify({ ok: true, deleted }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
+      status: 200, headers: { 'Content-Type': 'application/json' }
+    });
   }
-
-  return new Response(JSON.stringify({ ok: true, deleted, total: blobs.length }), {
-    headers: { 'Content-Type': 'application/json' }
-  });
 };
 
 export const config = { path: '/.netlify/functions/clear-cache' };

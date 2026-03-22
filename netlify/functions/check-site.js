@@ -1,6 +1,6 @@
 import { getStore } from '@netlify/blobs';
 
-const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
+const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export default async (req, context) => {
   const url = new URL(req.url);
@@ -11,11 +11,11 @@ export default async (req, context) => {
   const store = getStore('pages-cache');
   const cacheKey = 'p-' + Buffer.from(targetUrl).toString('base64').replace(/[^a-z0-9]/gi, '').slice(0, 60);
 
-  // Lire le cache sauf si force=1
   if (!force) {
     try {
       const cached = await store.get(cacheKey, { type: 'json' });
-      if (cached && Date.now() - (cached.ts || 0) < TTL_MS) {
+      // Invalider le cache si le body est vide ou trop court (page mal cachée)
+      if (cached && cached.body && cached.body.length > 500 && Date.now() - (cached.ts || 0) < TTL_MS) {
         return new Response(cached.body, {
           status: cached.status || 200,
           headers: {
@@ -44,7 +44,7 @@ export default async (req, context) => {
     const wpTotal = res.headers.get('X-WP-Total') || '';
     const wpPages = res.headers.get('X-WP-TotalPages') || '';
 
-    // Mettre en cache uniquement si le body contient du contenu utile
+    // Ne cacher que si le body a du contenu réel
     if (body.length > 500) {
       try {
         await store.setJSON(cacheKey, { ts: Date.now(), body, ct, status: res.status, wpTotal, wpPages });
