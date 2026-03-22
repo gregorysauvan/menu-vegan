@@ -679,161 +679,129 @@ function setFirstDay(n){
 /* ── EXPORT PDF MENU ── */
 async function exportMenu(){
   if(!st.menu.length){ alert("Generez d'abord un menu."); return; }
-  if(typeof window.jspdf === 'undefined'){ alert('PDF non disponible, rechargez la page.'); return; }
-
+  if(typeof window.jspdf === 'undefined'){ alert('PDF non disponible.'); return; }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit:'mm', format:'a4' });
-  const ML=14, MR=14, MT=14, MB=14, PW=210, PH=297, CW=182;
-  let y = MT;
-
-  function newPage(){ doc.addPage(); y = MT; }
-  function check(n){ if(y+n > PH-MB) newPage(); }
-
-  // Nettoyer une chaine : retirer les emojis (codepoint > 0x2000)
-  function clean(str){
-    if(!str) return '';
-    let out = '';
-    for(const ch of str){
-      if(ch.codePointAt(0) < 0x2000) out += ch;
+  const ML=14,MR=14,MT=14,MB=14,PW=210,PH=297,CW=182;
+  let y=MT;
+  function newPage(){ doc.addPage(); y=MT; }
+  function check(n){ if(y+n>PH-MB) newPage(); }
+  function safe(s){
+    if(!s) return '';
+    var out='';
+    for(var i=0;i<s.length;i++){
+      var code=s.charCodeAt(i);
+      if(code>=0x20 && code<=0xFF) out+=s[i];
     }
     return out.trim();
   }
-
   const MOMENT_ORDER=['petitdej','dejeuner','gouter','diner'];
   const moments=MOMENT_ORDER.filter(m=>st.mealTypes.has(m));
-
   // En-tete
-  doc.setFillColor(74,110,80);
-  doc.rect(0,0,PW,20,'F');
+  doc.setFillColor(74,110,80); doc.rect(0,0,PW,20,'F');
   doc.setTextColor(255,255,255);
   doc.setFont('helvetica','bold'); doc.setFontSize(14);
-  doc.text('Menu de la Semaine', ML, 9);
+  doc.text('Menu de la Semaine',ML,9);
   doc.setFont('helvetica','normal'); doc.setFontSize(8);
-  doc.text(new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}), ML, 16);
-  y = 26;
-
+  doc.text(new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}),ML,16);
+  y=26;
   for(const [di,day] of st.menu.entries()){
-    const isSoir = day.isSoiree || st.soireeDays.has(di);
-    const daySvcs = getDayServices(di);
+    const isSoir=day.isSoiree||st.soireeDays.has(di);
+    const daySvcs=getDayServices(di);
     check(12);
-
-    // Bandeau jour
-    doc.setFillColor(...(isSoir ? [123,31,162] : [74,110,80]));
-    doc.rect(ML, y, CW, 7, 'F');
+    doc.setFillColor(...(isSoir?[123,31,162]:[74,110,80]));
+    doc.rect(ML,y,CW,7,'F');
     doc.setTextColor(255,255,255);
     doc.setFont('helvetica','bold'); doc.setFontSize(9);
-    doc.text(clean(day.name).toUpperCase(), ML+2, y+5);
-    y += 9;
-
+    doc.text((safe(day.name)||('JOUR '+(di+1))).toUpperCase(),ML+2,y+5);
+    y+=9;
     for(const mt of moments){
-      const meal = day.meals[mt];
+      const meal=day.meals[mt];
       if(!meal) continue;
-      const mtSvcs = SNACK_MOMENTS.has(mt)?['snack']:daySvcs;
+      const mtSvcs=SNACK_MOMENTS.has(mt)?['snack']:daySvcs;
       if(!mtSvcs.some(svc=>meal[svc])) continue;
-
       check(6);
       doc.setFont('helvetica','italic'); doc.setFontSize(7);
       doc.setTextColor(140,134,120);
-      doc.text(clean(MOMENT_LABELS[mt]||mt).toUpperCase(), ML+2, y+4);
-      y += 6;
-
+      doc.text(safe(MOMENT_LABELS[mt]||mt).toUpperCase(),ML+2,y+4);
+      y+=6;
       for(const svc of mtSvcs){
-        const r = meal[svc];
-        if(!r) continue;
+        const r=meal[svc]; if(!r) continue;
         check(16);
-
-        // Fond recette
-        doc.setFillColor(247,243,236);
-        doc.rect(ML+1, y, CW-2, 7, 'F');
-
-        // Label service
+        doc.setFillColor(247,243,236); doc.rect(ML+1,y,CW-2,7,'F');
         doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
         doc.setTextColor(140,134,120);
-        doc.text(clean(COURSE_LABELS[svc]||svc).toUpperCase(), ML+3, y+4.5);
-
-        // Titre (lien)
-        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
-        doc.setTextColor(74,110,80);
-        const title = clean(r.title||'');
-        const titleLines = doc.splitTextToSize(title, CW-28);
-        if(r.id){ doc.textWithLink(titleLines[0]||title, ML+22, y+4.5, {url:r.id}); }
-        else { doc.text(titleLines[0]||title, ML+22, y+4.5); }
-
-        // Temps
+        doc.text(safe(COURSE_LABELS[svc]||svc).toUpperCase(),ML+3,y+4.5);
+        const title=safe(r.title||'');
+        if(title){
+          doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+          doc.setTextColor(74,110,80);
+          const tl=doc.splitTextToSize(title,CW-28);
+          doc.text(tl[0],ML+22,y+4.5);
+        }
         if(r.time){
           doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
           doc.setTextColor(140,134,120);
-          doc.text(r.time+' min', ML+CW-2, y+4.5, {align:'right'});
+          doc.text(r.time+' min',ML+CW-2,y+4.5,{align:'right'});
         }
-        y += 8;
-
-        // Ingredients
-        if(r.ings && r.ings.length){
+        y+=8;
+        if(r.ings&&r.ings.length){
           check(5);
           doc.setFont('helvetica','normal'); doc.setFontSize(7);
           doc.setTextColor(50,50,40);
-          const ingStr = r.ings.slice(0,8).map(clean).join(' - ');
-          const ingLines = doc.splitTextToSize(ingStr, CW-6);
-          for(const line of ingLines.slice(0,2)){
-            check(5); doc.text(line, ML+3, y+3.5); y += 4.5;
+          const ingStr=r.ings.slice(0,8).map(safe).filter(Boolean).join(' - ');
+          if(ingStr){
+            const il=doc.splitTextToSize(ingStr,CW-6);
+            for(const ln of il.slice(0,2)){ check(5); doc.text(ln,ML+3,y+3.5); y+=4.5; }
           }
         }
-
-        // Etapes
-        if(r.steps && r.steps.length){
+        if(r.steps&&r.steps.length){
           doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
           doc.setTextColor(120,114,100);
           for(const [si,step] of r.steps.slice(0,2).entries()){
-            const stepLines = doc.splitTextToSize((si+1)+'. '+clean(step), CW-6);
-            for(const line of stepLines.slice(0,1)){
-              check(4); doc.text(line, ML+3, y+3); y += 4;
-            }
+            const ss=safe((si+1)+'. '+step);
+            if(ss){ const sl=doc.splitTextToSize(ss,CW-6); check(4); doc.text(sl[0],ML+3,y+3); y+=4; }
           }
         }
-
-        y += 2;
+        if(r.id&&r.id.startsWith('http')){
+          check(4);
+          doc.setFont('helvetica','normal'); doc.setFontSize(6);
+          doc.setTextColor(140,134,120);
+          doc.text(r.id.replace(/^https?:\/\/(www\.)?/,'').slice(0,70),ML+3,y+3);
+          y+=4;
+        }
+        y+=2;
         doc.setDrawColor(210,205,195); doc.setLineWidth(0.15);
-        doc.line(ML+1, y, ML+CW-1, y);
-        y += 2;
+        doc.line(ML+1,y,ML+CW-1,y); y+=2;
       }
     }
-    y += 3;
+    y+=3;
   }
-
   // Liste de courses
   if(st.courses){
     newPage();
-    doc.setFillColor(74,110,80);
-    doc.rect(0,0,PW,18,'F');
+    doc.setFillColor(74,110,80); doc.rect(0,0,PW,18,'F');
     doc.setTextColor(255,255,255);
     doc.setFont('helvetica','bold'); doc.setFontSize(13);
-    doc.text('Liste de courses', ML, 12);
-    y = 24;
-
-    const allR = st.menu.flatMap(d=>Object.values(d.meals).flatMap(m=>Object.values(m))).filter(Boolean);
-    const seen = new Set();
-    const ings = [];
+    doc.text('Liste de courses',ML,12);
+    y=24;
+    const allR=st.menu.flatMap(d=>Object.values(d.meals).flatMap(m=>Object.values(m))).filter(Boolean);
+    const seen=new Set(); const ings=[];
     allR.forEach(r=>(r.ings||[]).forEach(ing=>{
-      const cl = clean(ing).replace(/^\d[\d\s.,\/]*\s*\w{0,3}\s*/,'').trim();
-      if(!cl||(st.stock||[]).some(s=>cl.toLowerCase().includes(s))) return;
-      if(!seen.has(cl.toLowerCase())){ seen.add(cl.toLowerCase()); ings.push(clean(ing)); }
+      const cl=safe(ing).replace(/^[\d\s.,]+(g|kg|ml|cl|l)?\s*/i,'').trim();
+      if(!cl||(st.stock||[]).some(s=>cl.toLowerCase().includes(s.toLowerCase()))) return;
+      if(!seen.has(cl.toLowerCase())){ seen.add(cl.toLowerCase()); ings.push(safe(ing)); }
     }));
-
-    const colW=(CW-4)/2;
-    let col=0, xBase=ML;
-    doc.setFont('helvetica','normal'); doc.setFontSize(8);
-    doc.setTextColor(40,40,35);
+    const colW=(CW-4)/2; let col=0,xBase=ML;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(40,40,35);
     for(const ing of ings){
-      if(y > PH-MB-8){
-        if(col===0){ col=1; xBase=ML+colW+4; y=24; }
-        else{ newPage(); col=0; xBase=ML; }
-      }
-      doc.rect(xBase+1, y+0.5, 2.5, 2.5);
-      doc.text(doc.splitTextToSize(ing, colW-7)[0], xBase+5, y+3);
-      y += 5.5;
+      if(!ing) continue;
+      if(y>PH-MB-8){ if(col===0){col=1;xBase=ML+colW+4;y=24;}else{newPage();col=0;xBase=ML;} }
+      doc.rect(xBase+1,y+0.5,2.5,2.5);
+      doc.text((doc.splitTextToSize(ing,colW-7)[0])||ing.slice(0,30),xBase+5,y+3);
+      y+=5.5;
     }
   }
-
   doc.save('menu-'+new Date().toISOString().slice(0,10)+'.pdf');
 }
 
