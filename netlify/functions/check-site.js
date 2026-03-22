@@ -1,5 +1,7 @@
 import { getStore } from '@netlify/blobs';
 
+// Nouveau nom de store → l'ancien cache est ignoré sans avoir à le vider
+const STORE_NAME = 'pages-cache-v2';
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export default async (req, context) => {
@@ -8,13 +10,12 @@ export default async (req, context) => {
   const force = url.searchParams.get('force') === '1';
   if (!targetUrl) return new Response('URL manquante', { status: 400 });
 
-  const store = getStore('pages-cache');
+  const store = getStore(STORE_NAME);
   const cacheKey = 'p-' + Buffer.from(targetUrl).toString('base64').replace(/[^a-z0-9]/gi, '').slice(0, 60);
 
   if (!force) {
     try {
       const cached = await store.get(cacheKey, { type: 'json' });
-      // Invalider le cache si le body est vide ou trop court (page mal cachée)
       if (cached && cached.body && cached.body.length > 500 && Date.now() - (cached.ts || 0) < TTL_MS) {
         return new Response(cached.body, {
           status: cached.status || 200,
@@ -44,7 +45,6 @@ export default async (req, context) => {
     const wpTotal = res.headers.get('X-WP-Total') || '';
     const wpPages = res.headers.get('X-WP-TotalPages') || '';
 
-    // Ne cacher que si le body a du contenu réel
     if (body.length > 500) {
       try {
         await store.setJSON(cacheKey, { ts: Date.now(), body, ct, status: res.status, wpTotal, wpPages });

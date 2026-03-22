@@ -516,7 +516,7 @@ const PROT_KW=['tofu','tempeh','seitan','lentille','pois chiche','haricot','soja
 const PROT_TIPS={pa:["Ajouter 150g de tofu sauté","Servir avec des lentilles"],gr:["Émietter du tofu fumé","Ajouter des pois chiches"],sa:["Ajouter du tofu mariné","Parsemer d'edamame"],so:["Ajouter des lentilles corail","Incorporer des haricots blancs"],ri:["Servir avec du tempeh grillé","Parsemer d'edamame"],co:["Ajouter des pois chiches rôtis","Incorporer des lentilles"],mi:["Ajouter du seitan","Incorporer des lentilles"],as:["Ajouter du tofu croustillant","Incorporer du tempeh mariné"],pi:["Ajouter du tofu émietté","Incorporer des pois chiches"],bu:["Steak de tofu","Galette de pois chiches"],x:["Ajouter 150g de tofu ferme","Servir avec des pois chiches rôtis"]};
 const SB_INFO={p:{c:'sb-p',i:'🌸'},s:{c:'sb-s',i:'☀️'},a:{c:'sb-a',i:'🍂'},w:{c:'sb-w',i:'❄️'}};
 const SC={spring:'p',summer:'s',autumn:'a',winter:'w'};
-const st={allRecipes:[],pool:[],menu:[],ideas:[],stock:[],season:'all',strict:false,prot:false,courses:false,bergPriority:false,diets:new Set(),catFilter:new Set(),activeSources:[],mealTypes:new Set(['dejeuner','diner']),courseTypes:new Set(['entree','plat','dessert']),viewMode:'agenda',token:null,sites:[],soireeDays:new Set(),dayStructures:{},firstDay:1};
+const st={allRecipes:[],pool:[],menu:[],ideas:[],stock:[],season:'all',strict:false,prot:false,courses:false,bergPriority:false,diets:new Set(),catFilter:new Set(),activeSources:[],mealTypes:new Set(['dejeuner','diner']),courseTypes:new Set(['entree','plat','dessert']),viewMode:'agenda',token:null,sites:[],soireeDays:new Set(),dayStructures:{},firstDay:1,_wantSoiree:false};
 
 function loadCfg(){try{const raw=localStorage.getItem(CFG_KEY)||getCookie(CFG_KEY);if(raw)return JSON.parse(raw);}catch{}return null;}
 function saveCfg(){const d={token:st.token,sites:st.sites,activeSources:st.activeSources};const json=JSON.stringify(d);try{localStorage.setItem(CFG_KEY,json);}catch{}if(getCookie('menuCookieOk')==='1')setCookie(CFG_KEY,json,365);}
@@ -548,15 +548,53 @@ function updatePoolInfo(){const cnt=document.getElementById('poolCount');const b
 
 /* ── SOIRÉE ── */
 function addSoireeDay(){
-  // Ajouter un jour soirée à la fin du menu actuel (ou prépare pour la prochaine génération)
-  const N = parseInt(document.getElementById('mealCount').value)||6;
-  const dayIdx = N; // index du jour soirée = après les jours normaux
-  st.soireeDays.add(dayIdx);
-  // Incrémenter le compteur de jours
-  const newN = N + 1;
-  document.getElementById('repasVal').textContent = newN;
-  document.getElementById('mealCount').value = newN;
-  if(st.menu.length) generate(); // regénérer si un menu existe déjà
+  // Toggle le mode soirée pour la prochaine génération
+  // Le dernier jour du menu sera une soirée (apéro+entrée+plat+dessert)
+  st._wantSoiree = !st._wantSoiree;
+  const btn = document.getElementById('btnSoiree');
+  if(btn){
+    btn.classList.toggle('on', st._wantSoiree);
+    btn.title = st._wantSoiree
+      ? 'Mode Soirée actif — le dernier jour sera une soirée (cliquer pour désactiver)'
+      : 'Ajouter un jour Soirée';
+  }
+  // Si un menu existe déjà, basculer le dernier jour
+  if(st.menu.length){
+    const lastIdx = st.menu.length - 1;
+    if(st._wantSoiree){
+      st.soireeDays.add(lastIdx);
+      st.menu[lastIdx].isSoiree = true;
+      const dayNames = getDayNames();
+      st.menu[lastIdx].name = '🥂 ' + (dayNames[lastIdx]||'Soirée');
+      regenerateDay(lastIdx);
+    } else {
+      st.soireeDays.delete(lastIdx);
+      st.menu[lastIdx].isSoiree = false;
+      const dayNames = getDayNames();
+      st.menu[lastIdx].name = dayNames[lastIdx]||`Jour ${lastIdx+1}`;
+      regenerateDay(lastIdx);
+    }
+  }
+}
+
+// Basculer un jour existant en mode soirée (clic sur le header du jour)
+function toggleDaySoiree(dayIdx){
+  const day = st.menu[dayIdx];
+  if(!day) return;
+  const wasSoiree = day.isSoiree || st.soireeDays.has(dayIdx);
+  if(wasSoiree){
+    day.isSoiree = false;
+    st.soireeDays.delete(dayIdx);
+    const dayNames = getDayNames();
+    day.name = dayNames[dayIdx]||`Jour ${dayIdx+1}`;
+  } else {
+    day.isSoiree = true;
+    st.soireeDays.add(dayIdx);
+    const dayNames = getDayNames();
+    day.name = '🥂 ' + (dayNames[dayIdx]||'Soirée');
+  }
+  delete st.dayStructures[dayIdx]; // reset structure custom
+  regenerateDay(dayIdx);
 }
 
 function isSoireeDay(dayIdx){ return st.soireeDays.has(dayIdx); }
@@ -852,9 +890,11 @@ function generate(){
     else{const allKnownCats=Object.values(COURSE_TYPE_MAP).flat();const catIds=COURSE_TYPE_MAP[svc]||[];poolByCourse[svc]=pool.filter(r=>{const rc=r.cats||[];if(rc.length&&rc.every(c=>EXCLUDED_CATS.includes(c)))return false;if(svc==='plat'&&rc.some(c=>PLAT_EXCLUDED.includes(c))&&!rc.some(c=>[8603,16929,15982,35459,35460].includes(c)))return false;// Exclure les boissons/jus des plats et entrées
       if(svc!=='dessert'&&DRINK_KW.some(k=>r.title.toLowerCase().includes(k)))return false;const hasCat=rc.some(c=>allKnownCats.includes(c)&&!EXCLUDED_CATS.includes(c));return !hasCat||rc.some(c=>catIds.includes(c));});if(!poolByCourse[svc].length)poolByCourse[svc]=pool.filter(r=>!DRINK_KW.some(k=>r.title.toLowerCase().includes(k)));}
   }
-  // Reset : nouvelle génération = état propre
+  // Reset structures custom mais garder l'intention soirée
   st.dayStructures={};
-  st.soireeDays.clear(); // les jours soirée se rechoisissent après génération
+  st.soireeDays.clear();
+  // Si mode soirée actif → marquer le dernier jour
+  if(st._wantSoiree) st.soireeDays.add(N-1);
   const days=[];
   const globalUsed=new Set();
   const dayNames=getDayNames();
@@ -918,9 +958,11 @@ function renderAgenda(g){
         title="${locked?'Plat toujours inclus':svc}">${label}</button>`;
     }).join('');
     const headerBg=isSoir?'#7b1fa2':'#4a6e50';
-    let h=`<div style="background:${headerBg};color:#fff;padding:6px 12px;display:flex;align-items:center;gap:6px">
+    const soireeTip=isSoir?'Cliquer pour retirer le mode Soirée':'Cliquer pour passer en mode Soirée 🥂';
+    let h=`<div style="background:${headerBg};color:#fff;padding:6px 12px;display:flex;align-items:center;gap:6px;cursor:pointer"
+      onclick="toggleDaySoiree(${di})" title="${soireeTip}">
       <span style="font-size:12px;font-weight:500;flex:1">${day.name}</span>
-      <div style="display:flex;gap:3px">${structBtns}</div>
+      <div style="display:flex;gap:3px" onclick="event.stopPropagation()">${structBtns}</div>
     </div>`;
     if(moments.length===1){const mt=moments[0];const svcs=SNACK_MOMENTS.has(mt)?['snack']:getDayServices(di);h+=`<div style="padding:8px 12px"><div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:6px">${MOMENT_LABELS[mt]||mt}</div>`;for(const svc of svcs)h+=recipeRow(day.meals[mt]?.[svc],di,mt,svc);h+=`</div>`;}
     else{h+=`<div style="display:grid;grid-template-columns:1fr 1fr">`;moments.forEach((mt,idx)=>{const svcs=SNACK_MOMENTS.has(mt)?['snack']:getDayServices(di);const col=idx%COLS;const row=Math.floor(idx/COLS);const borderR=col<COLS-1?'border-right:1px solid var(--warm);':'';const borderT=row>0?'border-top:1px solid var(--warm);':'';h+=`<div style="padding:8px 10px;${borderR}${borderT}"><div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:5px">${MOMENT_LABELS[mt]||mt}</div>`;for(const svc of svcs)h+=recipeRow(day.meals[mt]?.[svc],di,mt,svc);h+=`</div>`;});h+=`</div>`;}
@@ -934,7 +976,8 @@ function renderColumns(g){
   st.menu.forEach((day,di)=>{
     const card=document.createElement('div');card.style.cssText='background:var(--white);border:1px solid var(--warm);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:200px';
     const isSoirC=day.isSoiree||st.soireeDays.has(di);
-    let h=`<div style="background:${isSoirC?'#7b1fa2':'#4a6e50'};color:#fff;padding:8px 14px;font-size:13px;font-weight:600;letter-spacing:.3px">${day.name}</div>`;
+    let h=`<div style="background:${isSoirC?'#7b1fa2':'#4a6e50'};color:#fff;padding:8px 14px;font-size:13px;font-weight:600;letter-spacing:.3px;cursor:pointer"
+      onclick="toggleDaySoiree(${di})" title="${isSoirC?'Retirer la Soirée':'Passer en Soirée 🥂'}">${day.name}</div>`;
     const daySvcsC=getDayServices(di);for(const mt of moments){const mtLabel=MOMENT_LABELS[mt]||mt;const svcs=SNACK_MOMENTS.has(mt)?['snack']:daySvcsC;const isLast=moments.indexOf(mt)===moments.length-1;h+=`<div style="padding:10px 14px;${isLast?'':'border-bottom:1px solid var(--warm)'}"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px">${mtLabel}</div>`;for(const svc of svcs){const r=day.meals[mt]?.[svc];if(!r){h+=`<div style="font-size:12px;color:var(--muted);padding:3px 0">—</div>`;continue;}const [bg,col]=(COURSE_COLORS[svc]||'var(--warm)|var(--earth)').split('|');h+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 0;border-bottom:1px dashed var(--warm)"><span style="font-size:10px;padding:2px 6px;border-radius:8px;background:${bg};color:${col};flex-shrink:0;margin-top:1px">${COURSE_LABELS[svc]||svc}</span><span style="font-size:12px;flex:1;cursor:pointer;line-height:1.4;color:var(--ink)" onclick="openModalItem(${di},'${mt}','${svc}')">${r.title}</span><button onclick="event.stopPropagation();swapItem(${di},'${mt}','${svc}')" style="background:none;border:1px solid var(--warm);border-radius:5px;padding:2px 7px;font-size:11px;color:var(--muted);cursor:pointer;flex-shrink:0;white-space:nowrap;touch-action:manipulation">↻</button></div>`;}h+=`</div>`;}
     card.innerHTML=h;g.appendChild(card);
   });
