@@ -17,8 +17,8 @@ const SOURCES = {
     name: 'Ptitchef', url: 'https://www.ptitchef.com', type: 'sitemap', specialty: 'general', icon: '👨‍🍳', maxRecipes: 3000,
     sitemaps: ['https://www.ptitchef.com/upload_data/sitemaps/recipe-fr-1.xml'],
   },
-  'marmiton': {
-    name: 'Marmiton', url: 'https://www.marmiton.org', type: 'marmiton', specialty: 'general', icon: '🍳',
+  'cuisinevegetalienne': {
+    name: 'Cuisine Végétalienne', url: 'https://cuisinevegetalienne.fr', type: 'wordpress', specialty: 'vegan', icon: '🌾',
   },
 };
 
