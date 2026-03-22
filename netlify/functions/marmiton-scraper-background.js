@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────
-// marmiton-scraper-background.js  (suffix -background = 15min max)
-// Scrape Marmiton par type × lettre, sauvegarde dans Blobs
+// marmiton-scraper-background.js
+// Suffixe -background = timeout 15 min, retourne 202 immédiatement
+// Scrape Marmiton type × lettre, sauvegarde dans Netlify Blobs
 // ─────────────────────────────────────────────────────────────────
 import { getStore } from '@netlify/blobs';
 import { searchRecipes, MarmitonQueryBuilder, RECIPE_TYPE } from 'marmiton-api';
@@ -8,10 +9,10 @@ import { searchRecipes, MarmitonQueryBuilder, RECIPE_TYPE } from 'marmiton-api';
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
 const DEFAULT_TYPES = [
-  RECIPE_TYPE.STARTER,      // entree
-  RECIPE_TYPE.MAIN_COURSE,  // platprincipal
-  RECIPE_TYPE.SIDE_DISH,    // accompagnement
-  RECIPE_TYPE.DESSERT,      // dessert
+  RECIPE_TYPE.STARTER,      // entree      → cats [8602]
+  RECIPE_TYPE.MAIN_COURSE,  // platprincipal → cats [8603]
+  RECIPE_TYPE.SIDE_DISH,    // accompagnement → cats [8603]
+  RECIPE_TYPE.DESSERT,      // dessert     → cats [8604]
 ];
 
 const CAT_MAP = {
@@ -37,18 +38,24 @@ function toInternalRecipe(r) {
 }
 
 export default async (req) => {
-  const store = getStore('recipes-cache');
+  // Utiliser strong consistency pour que les mises à jour de statut
+  // soient immédiatement visibles par les lectures côté client
+  const store = getStore({ name: 'recipes-cache', consistency: 'strong' });
 
-  // Marquer comme "en cours"
+  // Marquer comme "en cours" dès le départ
   await store.setJSON('src-meta-marmiton', {
-    status: 'running', startedAt: Date.now(),
-    name: 'Marmiton', ts: null, count: 0,
+    status: 'running',
+    startedAt: Date.now(),
+    name: 'Marmiton',
+    progress: 0,
+    count: 0,
+    ts: null,
   });
 
   const seen    = new Set();
   const results = [];
+  const total   = DEFAULT_TYPES.length * ALPHABET.length; // 104
   let   done    = 0;
-  const total   = DEFAULT_TYPES.length * ALPHABET.length;
 
   for (const type of DEFAULT_TYPES) {
     for (const letter of ALPHABET) {
@@ -60,6 +67,7 @@ export default async (req) => {
           .build();
 
         const recipes = await searchRecipes(q, { limit: 48 });
+
         for (const r of recipes) {
           const id = r.url || r.name;
           if (!id || seen.has(id)) continue;
@@ -71,29 +79,38 @@ export default async (req) => {
       }
 
       done++;
-      // Mise à jour du statut toutes les 10 itérations
-      if (done % 10 === 0) {
-        await store.setJSON('src-meta-marmiton', {
-          status: 'running',
-          startedAt: Date.now(),
-          name: 'Marmiton',
-          progress: Math.round(done / total * 100),
-          count: results.length,
-          ts: null,
-        });
+
+      // Mise à jour du statut toutes les 13 itérations (~toutes les ~26s)
+      if (done % 13 === 0) {
+        try {
+          await store.setJSON('src-meta-marmiton', {
+            status: 'running',
+            startedAt: Date.now(),
+            name: 'Marmiton',
+            progress: Math.round((done / total) * 100),
+            count: results.length,
+            ts: null,
+          });
+        } catch(e) {
+          console.warn('[marmiton] Erreur mise à jour statut:', e.message);
+        }
       }
 
-      await new Promise(r => setTimeout(r, 200));
+      // Pause entre requêtes pour ne pas se faire bloquer
+      await new Promise(r => setTimeout(r, 250));
     }
+
+    console.log(`[marmiton] Type "${type}" terminé — ${results.length} recettes uniques`);
   }
 
-  // Sauvegarder les recettes
+  // Sauvegarde finale
   await store.setJSON('src-marmiton', results);
   await store.setJSON('src-meta-marmiton', {
     status: 'done',
     ts: Date.now(),
     count: results.length,
     name: 'Marmiton',
+    progress: 100,
   });
 
   console.log(`[marmiton] Terminé — ${results.length} recettes uniques`);
