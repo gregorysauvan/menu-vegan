@@ -344,11 +344,15 @@ header h1 span{color:var(--sage-light);font-style:italic;}
         </div>
       </div>
       <div class="sidebar-section">
-        <div class="sidebar-section-title collapsed" onclick="toggleSection(this)">💪 Option <span class="chevron">▾</span></div>
+        <div class="sidebar-section-title collapsed" onclick="toggleSection(this)">💪 Options <span class="chevron">▾</span></div>
         <div class="section-body collapsed">
           <div class="prot-row" id="protRow" onclick="toggleProt()">
             <span class="prot-row-icon">💪</span>
             <span class="prot-row-label">Protéine à chaque repas</span>
+          </div>
+          <div class="prot-row" id="bergPriorityRow" onclick="toggleBergPriority()" style="display:none">
+            <span class="prot-row-icon">⭐</span>
+            <span class="prot-row-label">Priorité Bergamot (80%)</span>
           </div>
         </div>
       </div>
@@ -445,6 +449,8 @@ const DIET_FILTERS={
 const SNACK_MOMENTS=new Set(['petitdej','gouter']);
 const COURSE_TYPE_MAP={entree:[8602,15947,8610,31409],plat:[8603,16929,15982,35459,35460],dessert:[8604,8606,8608]};
 const EXCLUDED_CATS=[12689,13569,29062,34519,55286,55447,79337];
+// Mots-clés titre qui signalent une boisson/jus → jamais en plat/entrée
+const DRINK_KW=['jus ','smoothie','jus de','détox','detox','latte','infusion','boisson','sirop','limonade','kombucha','shake','milkshake','lassi','thé ','café ','tisane'];
 const PLAT_EXCLUDED=[8607,8608,8604,8606];
 COURSE_TYPE_MAP['snack']=[8608];
 const COURSE_LABELS={entree:'Entrée',plat:'Plat',dessert:'Dessert',snack:'Recette'};
@@ -471,7 +477,7 @@ const PROT_KW=['tofu','tempeh','seitan','lentille','pois chiche','haricot','soja
 const PROT_TIPS={pa:["Ajouter 150g de tofu sauté","Servir avec des lentilles"],gr:["Émietter du tofu fumé","Ajouter des pois chiches"],sa:["Ajouter du tofu mariné","Parsemer d'edamame"],so:["Ajouter des lentilles corail","Incorporer des haricots blancs"],ri:["Servir avec du tempeh grillé","Parsemer d'edamame"],co:["Ajouter des pois chiches rôtis","Incorporer des lentilles"],mi:["Ajouter du seitan","Incorporer des lentilles"],as:["Ajouter du tofu croustillant","Incorporer du tempeh mariné"],pi:["Ajouter du tofu émietté","Incorporer des pois chiches"],bu:["Steak de tofu","Galette de pois chiches"],x:["Ajouter 150g de tofu ferme","Servir avec des pois chiches rôtis"]};
 const SB_INFO={p:{c:'sb-p',i:'🌸'},s:{c:'sb-s',i:'☀️'},a:{c:'sb-a',i:'🍂'},w:{c:'sb-w',i:'❄️'}};
 const SC={spring:'p',summer:'s',autumn:'a',winter:'w'};
-const st={allRecipes:[],pool:[],menu:[],ideas:[],stock:[],season:'all',strict:false,prot:false,courses:false,diets:new Set(),catFilter:new Set(),activeSources:[],mealTypes:new Set(['dejeuner','diner']),courseTypes:new Set(['entree','plat','dessert']),viewMode:'agenda',token:null,sites:[]};
+const st={allRecipes:[],pool:[],menu:[],ideas:[],stock:[],season:'all',strict:false,prot:false,courses:false,bergPriority:false,diets:new Set(),catFilter:new Set(),activeSources:[],mealTypes:new Set(['dejeuner','diner']),courseTypes:new Set(['entree','plat','dessert']),viewMode:'agenda',token:null,sites:[]};
 
 function loadCfg(){try{const raw=localStorage.getItem(CFG_KEY)||getCookie(CFG_KEY);if(raw)return JSON.parse(raw);}catch{}return null;}
 function saveCfg(){const d={token:st.token,sites:st.sites,activeSources:st.activeSources};const json=JSON.stringify(d);try{localStorage.setItem(CFG_KEY,json);}catch{}if(getCookie('menuCookieOk')==='1')setCookie(CFG_KEY,json,365);}
@@ -551,7 +557,7 @@ async function startLoading(){
   document.getElementById('loadScreen').style.display='none';document.getElementById('app').style.display='block';document.getElementById('btnSettings').style.display='inline-flex';
   buildCatList();
   if(st.allRecipes.length===0){document.getElementById('grid').innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">Aucune recette. <span style="text-decoration:underline;cursor:pointer" onclick="openSettings()">Vérifiez la configuration ⚙️</span></div>`;}
-  else{setSeason(autoSeason());}
+  else{setSeason(autoSeason());updateBergPriorityVisibility();}
 }
 
 async function fetchSourceFromBlobs(srcKey){
@@ -588,6 +594,14 @@ function autoSeason(){const m=new Date().getMonth()+1;return m>=3&&m<=5?'spring'
 function setSeason(s){st.season=s;document.querySelectorAll('.season-item').forEach(el=>{el.classList.toggle('sel',el.getAttribute('data-s')===s);});const sr=document.getElementById('strictRow');if(sr)sr.style.display=s==='all'?'none':'flex';if(s==='all'&&sr)sr.classList.remove('on');if(s==='all')st.strict=false;}
 function toggleStrict(){st.strict=!st.strict;const sr=document.getElementById('strictRow');if(sr)sr.classList.toggle('on',st.strict);}
 function toggleProt(){st.prot=!st.prot;const pr=document.getElementById('protRow');if(pr)pr.classList.toggle('on',st.prot);if(st.menu.length)renderMenus();}
+function toggleBergPriority(){st.bergPriority=!st.bergPriority;const el=document.getElementById('bergPriorityRow');if(el)el.classList.toggle('on',st.bergPriority);}
+// Afficher/masquer l'option bergPriority selon si Bergamot est connecté et des sources externes actives
+function updateBergPriorityVisibility(){
+  const hasBerg=st.token&&st.allRecipes.some(r=>r.src==='berg');
+  const hasExt=st.allRecipes.some(r=>r.src!=='berg');
+  const el=document.getElementById('bergPriorityRow');
+  if(el) el.style.display=(hasBerg&&hasExt)?'flex':'none';
+}
 
 function addIdea(){const inp=document.getElementById('ideaInput'),val=inp.value.trim();if(!val)return;val.split(/[,;]+/).map(s=>s.trim()).filter(Boolean).forEach(p=>{if(!st.ideas.includes(p))st.ideas.push(p);});inp.value='';renderTags();}
 function removeIdea(i){st.ideas.splice(i,1);renderTags();}
@@ -597,24 +611,55 @@ function renderTags(){document.getElementById('ideaTags').innerHTML=st.ideas.map
 function ideaScore(r){if(!st.ideas.length)return 0;const h=(r.title+' '+r.ings.join(' ')+' '+r.style).toLowerCase();let s=0;st.ideas.forEach(idea=>idea.toLowerCase().split(/\s+/).forEach(w=>{if(w.length>2&&h.includes(w))s++;}));return s;}
 function stockScore(r){if(!st.stock.length)return 0;return st.stock.filter(s=>r.ings.join(' ').toLowerCase().includes(s)).length;}
 
-function getPool(){if(!st.strict||st.season==='all')return st.pool;const c=SC[st.season];return st.pool.filter(r=>!r.seasons||r.seasons.includes(c));}
+function getPool(){
+  let base = (!st.strict||st.season==='all') ? st.pool : st.pool.filter(r=>!r.seasons||r.seasons.includes(SC[st.season]));
+  return base;
+}
+// Construit un pool pondéré 80% Bergamot / 20% autres si bergPriority actif
+function getWeightedPool(basePool){
+  if(!st.bergPriority) return basePool;
+  const berg=basePool.filter(r=>r.src==='berg');
+  const ext=basePool.filter(r=>r.src!=='berg');
+  if(!berg.length||!ext.length) return basePool; // si un seul type, pas de pondération
+  // On construit un tableau où Bergamot représente ~80%
+  const total=Math.max(berg.length+ext.length, 20);
+  const bergCount=Math.round(total*0.8);
+  const extCount=total-bergCount;
+  // Répéter/tronquer pour atteindre les proportions
+  const bergW=[], extW=[];
+  for(let i=0;i<bergCount;i++) bergW.push(berg[i%berg.length]);
+  for(let i=0;i<extCount;i++) extW.push(ext[i%ext.length]);
+  return shuffle([...bergW,...extW]);
+}
 function score(r){let s=ideaScore(r)*3+stockScore(r)*2;if(st.season!=='all'&&(!r.seasons||r.seasons.includes(SC[st.season])))s+=2;if(r.photo)s+=1;if(r.time>0&&r.time<=60)s+=1;if(st.prot&&hasProtein(r))s+=3;return s;}
 function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
 
 function generate(){
   if(!st.pool.length){alert('Aucune recette ne correspond aux filtres.');return;}
-  const N=parseInt(document.getElementById('mealCount').value)||6;const pool=getPool();if(!pool.length){alert('Aucune recette pour ces filtres.');return;}
+  const N=parseInt(document.getElementById('mealCount').value)||6;const pool=getWeightedPool(getPool());if(!pool.length){alert('Aucune recette pour ces filtres.');return;}
   const moments=['petitdej','dejeuner','gouter','diner'].filter(m=>st.mealTypes.has(m));
   const allSnack=[...st.mealTypes].every(m=>SNACK_MOMENTS.has(m));const services=allSnack?['snack']:[...st.courseTypes];
   const poolByCourse={};const allServices=[...new Set([...services,'snack'])];
   for(const svc of allServices){
     if(svc==='snack'){poolByCourse[svc]=pool.filter(r=>(r.cats||[]).includes(8608));if(!poolByCourse[svc].length)poolByCourse[svc]=pool.filter(r=>(r.cats||[]).some(c=>[8608,8607,8606,8604].includes(c)));}
-    else{const allKnownCats=Object.values(COURSE_TYPE_MAP).flat();const catIds=COURSE_TYPE_MAP[svc]||[];poolByCourse[svc]=pool.filter(r=>{const rc=r.cats||[];if(rc.length&&rc.every(c=>EXCLUDED_CATS.includes(c)))return false;if(svc==='plat'&&rc.some(c=>PLAT_EXCLUDED.includes(c))&&!rc.some(c=>[8603,16929,15982,35459,35460].includes(c)))return false;const hasCat=rc.some(c=>allKnownCats.includes(c)&&!EXCLUDED_CATS.includes(c));return !hasCat||rc.some(c=>catIds.includes(c));});if(!poolByCourse[svc].length)poolByCourse[svc]=pool;}
+    else{const allKnownCats=Object.values(COURSE_TYPE_MAP).flat();const catIds=COURSE_TYPE_MAP[svc]||[];poolByCourse[svc]=pool.filter(r=>{const rc=r.cats||[];if(rc.length&&rc.every(c=>EXCLUDED_CATS.includes(c)))return false;if(svc==='plat'&&rc.some(c=>PLAT_EXCLUDED.includes(c))&&!rc.some(c=>[8603,16929,15982,35459,35460].includes(c)))return false;// Exclure les boissons/jus des plats et entrées
+      if(svc!=='dessert'&&DRINK_KW.some(k=>r.title.toLowerCase().includes(k)))return false;const hasCat=rc.some(c=>allKnownCats.includes(c)&&!EXCLUDED_CATS.includes(c));return !hasCat||rc.some(c=>catIds.includes(c));});if(!poolByCourse[svc].length)poolByCourse[svc]=pool.filter(r=>!DRINK_KW.some(k=>r.title.toLowerCase().includes(k)));}
   }
   const days=[];
+  // Anti-doublon global : on track TOUS les IDs utilisés, tous services confondus
+  const globalUsed=new Set();
   for(let d=0;d<N;d++){
     const dayObj={name:DAY_NAMES[d]||`Jour ${d+1}`,meals:{}};
-    for(const mt of moments){dayObj.meals[mt]={};const mtServices=SNACK_MOMENTS.has(mt)?['snack']:services;for(const svc of mtServices){const p=poolByCourse[svc];const alreadyUsed=days.flatMap(day=>Object.values(day.meals).flatMap(meal=>meal[svc]?[meal[svc].id]:[]));const avail=shuffle(p.filter(r=>!alreadyUsed.includes(r.id)));const scored=avail.map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);dayObj.meals[mt][svc]=scored[0]?.r||p[Math.floor(Math.random()*p.length)];}}
+    for(const mt of moments){dayObj.meals[mt]={};const mtServices=SNACK_MOMENTS.has(mt)?['snack']:services;for(const svc of mtServices){const p=poolByCourse[svc];
+      // Filtre anti-doublon global
+      let avail=shuffle(p.filter(r=>!globalUsed.has(r.id)));
+      // Si le pool est épuisé (peu de recettes), on relâche le filtre global
+      if(!avail.length) avail=shuffle(p);
+      const scored=avail.map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
+      const chosen=scored[0]?.r||avail[0]||p[Math.floor(Math.random()*p.length)];
+      dayObj.meals[mt][svc]=chosen;
+      if(chosen) globalUsed.add(chosen.id);
+    }}
     days.push(dayObj);
   }
   st.menu=days;renderMenus();if(st.courses)renderCourses();
