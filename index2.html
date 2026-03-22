@@ -373,6 +373,24 @@ header h1 span{color:var(--sage-light);font-style:italic;}
   .repas-bar{gap:10px;padding:9px 12px;}
 }
 
+
+.source-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--warm);background:var(--cream);cursor:pointer;touch-action:manipulation;transition:all .15s;user-select:none;}
+.source-item:hover{border-color:var(--sage);}
+.source-item.active{border-color:var(--sage-dark);background:#eef5ef;}
+.source-icon{font-size:1.1rem;flex-shrink:0;width:22px;text-align:center;}
+.source-info{flex:1;min-width:0;}
+.source-name{font-size:.83rem;font-weight:500;color:var(--ink);}
+.source-meta{font-size:.68rem;color:var(--muted);}
+.source-toggle{width:18px;height:18px;border-radius:4px;border:1.5px solid var(--warm);background:var(--cream);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.source-item.active .source-toggle{background:var(--sage-dark);border-color:var(--sage-dark);}
+.source-item.active .source-toggle::after{content:'✓';color:#fff;font-size:.7rem;font-weight:700;}
+.source-badge{font-size:.63rem;padding:1px 6px;border-radius:8px;font-weight:500;flex-shrink:0;}
+.badge-vegan{background:#e8f5e9;color:#1b5e20;}
+.badge-healthy{background:#e3f2fd;color:#0d47a1;}
+.badge-bio{background:#f1f8e9;color:#33691e;}
+.badge-general{background:var(--warm);color:var(--earth);}
+.rebuild-log{font-size:.69rem;font-family:monospace;background:var(--ink);color:#7fff7f;border-radius:5px;padding:8px 10px;max-height:120px;overflow-y:auto;margin-top:8px;display:none;}
+.rebuild-log.on{display:block;}
 </style>
 </head>
 <body>
@@ -618,23 +636,39 @@ header h1 span{color:var(--sage-light);font-style:italic;}
       <button class="set-close" onclick="closeSettings()">✕</button>
     </div>
     <div class="set-body">
+
+      <!-- Bergamot -->
       <div class="set-sec">
         <h3>🔐 Compte Bergamot</h3>
-        <p class="sub">Vos recettes personnelles</p>
+        <p class="sub">Vos recettes personnelles — liées à votre compte</p>
         <div id="setBergStatus"></div>
         <div id="setBergForm"></div>
       </div>
+
+      <!-- Sources externes — catalogue Blobs -->
       <div class="set-sec">
-        <h3>🌐 Sites de recettes</h3>
-        <p class="sub">Blogs WordPress compatibles (JSON-LD Recipe requis)</p>
-        <ul class="site-list" id="setExternalList"></ul>
-        <div class="add-row" style="margin-top:8px">
-          <input class="add-input" id="setExternalUrl" type="url" placeholder="https://www.monblog.com">
-          <button class="btn-check" id="btnSetCheck" onclick="checkSite('setExternalUrl','btnSetCheck','setExternalMsg','setExternalList')">Vérifier</button>
+        <h3>🌐 Sources de recettes</h3>
+        <p class="sub">Base commune — rechargée côté serveur, instantanée pour vous</p>
+        <div id="sourceCatalog" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+          <div style="font-size:.75rem;color:var(--muted)">Chargement du catalogue…</div>
         </div>
-        <div id="setExternalMsg" style="margin-top:6px"></div>
-        <button class="btn-save-reload" onclick="saveAndReload()">💾 Enregistrer et recharger</button>
+        <button class="btn-save-reload" onclick="saveAndReload()">✅ Appliquer la sélection</button>
       </div>
+
+      <!-- Admin : reconstruire la base -->
+      <div class="set-sec" style="border:1px dashed var(--warm)">
+        <h3>🛠️ Administration</h3>
+        <p class="sub">Reconstruit la base côté serveur (Netlify). Long mais une seule fois pour tous.</p>
+        <div id="rebuildStatus" style="font-size:.75rem;color:var(--muted);margin-bottom:8px"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn-check" onclick="rebuildAll()" style="background:var(--earth)">🔄 Tout reconstruire</button>
+          <select id="rebuildSourceSel" style="font-family:inherit;font-size:.78rem;border:1px solid var(--warm);border-radius:6px;padding:5px 8px;background:var(--cream)">
+            <option value="">— Source unique —</option>
+          </select>
+          <button class="btn-check" onclick="rebuildOne()" style="background:var(--sage-dark)">↻ Reconstruire</button>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -770,6 +804,7 @@ const st = {
   prot: false, courses: false,
   diets: new Set(),  // filtres actifs : 'vegan','vege','sporc','sgluten'
   catFilter: new Set(),  // filtre type de plat : Set de cat IDs Bergamot
+  activeSources: [],  // clés des sources Blobs activées par l'utilisateur
   mealTypes: new Set(['dejeuner','diner']),  // petit-dej, dejeuner, gouter, diner disponibles
   courseTypes: new Set(['entree','plat','dessert']),
   viewMode: 'agenda',  // 'agenda' ou 'columns'
@@ -788,7 +823,7 @@ function loadCfg(){
   return null;
 }
 function saveCfg(){
-  const d = {token: st.token, sites: st.sites};
+  const d = {token: st.token, sites: st.sites, activeSources: st.activeSources};
   const json = JSON.stringify(d);
   try { localStorage.setItem(CFG_KEY, json); } catch{}
   if(getCookie('menuCookieOk') === '1') setCookie(CFG_KEY, json, 365);
@@ -900,7 +935,7 @@ function updatePoolInfo(){
 async function init(){
   if(!getCookie('menuCookieOk')) document.getElementById('cookieBanner').style.display='flex';
   const cfg = loadCfg();
-  if(cfg){ st.token = cfg.token||null; st.sites = cfg.sites||[]; }
+  if(cfg){ st.token = cfg.token||null; st.sites = cfg.sites||[]; st.activeSources = cfg.activeSources||[]; }
   if(!cfg || !st.token){
     document.getElementById('setupScreen').style.display='block';
     setEl('headerSub','textContent','Configuration');
@@ -1059,71 +1094,20 @@ async function startLoading(){
   const _ap=document.getElementById('app'); if(_ap)_ap.style.display='none';
   let berg=[], extra=[];
 
+  // Bergamot : lié au compte, chargé côté client
   if(st.token){
     try { berg = await loadBergamot(); } catch(e){ console.warn('Bergamot:', e); }
   }
-  for(const site of st.sites){
+
+  // Sources externes : lues depuis Netlify Blobs (déjà indexées côté serveur)
+  const activeSources = st.activeSources || [];
+  for(let idx=0; idx<activeSources.length; idx++){
+    const srcKey = activeSources[idx];
     try {
-      let siteRecipes = null;
-      const ckL = 'extR_' + btoa(site.url).replace(/[^a-z0-9]/gi,'').slice(0,20);
-      const cmL = 'extM_' + btoa(site.url).replace(/[^a-z0-9]/gi,'').slice(0,20);
-
-      if(!window._forceReload){
-        // A. Essayer Netlify Blobs (cache serveur)
-        try {
-          const br = await fetch(`/.netlify/functions/external-recipes?action=get&url=${encodeURIComponent(site.url)}`,
-            {signal:AbortSignal.timeout(5000)});
-          if(br.ok && br.status === 200){
-            const bdata = await br.json();
-            if(bdata && bdata.length > 0){
-              siteRecipes = bdata;
-              setLoad(`${site.name||site.url} (cache serveur)…`, 88);
-              console.log(`[Blobs ext] ${site.name}: ${bdata.length} recettes`);
-            }
-          }
-        } catch(e){ console.warn('[Blobs ext] get:', e); }
-
-        // B. Essayer localStorage si Blobs raté
-        if(!siteRecipes){
-          try {
-            const meta = JSON.parse(localStorage.getItem(cmL)||'{}');
-            if(Date.now()-(meta.ts||0) < 7200000){
-              const cached = JSON.parse(localStorage.getItem(ckL)||'null');
-              if(cached && cached.length > 0){
-                siteRecipes = cached;
-                setLoad(`${site.name||site.url} (cache local)…`, 88);
-              }
-            }
-          } catch(e){}
-        }
-      }
-
-      // C. Charger depuis le site si pas de cache
-      if(!siteRecipes){
-        setLoad(`Chargement ${site.name||site.url}…`, 88);
-        siteRecipes = await loadExternalSite(site);
-
-        if(siteRecipes.length){
-          // Sauvegarder dans localStorage
-          try {
-            localStorage.setItem(ckL, JSON.stringify(siteRecipes));
-            localStorage.setItem(cmL, JSON.stringify({ts:Date.now()}));
-          } catch(e){}
-
-          // Sauvegarder dans Netlify Blobs
-          try {
-            await fetch(`/.netlify/functions/external-recipes?action=set&url=${encodeURIComponent(site.url)}&name=${encodeURIComponent(site.name||'')}&type=${encodeURIComponent(site.type||'')}`, {
-              method: 'POST',
-              headers: {'Content-Type':'application/json'},
-              body: JSON.stringify(siteRecipes),
-              signal: AbortSignal.timeout(10000),
-            });
-          } catch(e){ console.warn('[Blobs ext] set:', e); }
-        }
-      }
-
-      extra = extra.concat(siteRecipes || []);
-    } catch(e){ console.warn('Site ext:', e); }
+      setLoad(`Chargement ${srcKey}…`, 75 + idx * 5);
+      const recipes = await fetchSourceFromBlobs(srcKey);
+      extra = extra.concat(recipes);
+    } catch(e){ console.warn(`Source ${srcKey}:`, e); }
   }
 
   st.allRecipes = [...berg, ...extra];
@@ -1131,10 +1115,7 @@ async function startLoading(){
 
   const parts=[];
   if(berg.length) parts.push(`${berg.length.toLocaleString('fr')} Bergamot`);
-  if(extra.length){
-    const ns = st.sites.length;
-    parts.push(`${extra.length.toLocaleString('fr')} recette${extra.length>1?'s':''} externe${ns>1?'s':''} (${ns} site${ns>1?'s':''})`);
-  }
+  if(extra.length) parts.push(`${extra.length.toLocaleString('fr')} recettes (${activeSources.length} site${activeSources.length>1?'s':''})`);
   setEl('headerSub','textContent', parts.join(' · ') || 'Aucune source connectée');
   setEl('hcount','textContent', `🌿 ${st.allRecipes.length.toLocaleString('fr')} recettes`);
 
@@ -1143,24 +1124,43 @@ async function startLoading(){
   document.getElementById('btnSettings').style.display='inline-flex';
   document.getElementById('btnRefresh').style.display='inline-flex';
 
-  // Construire la liste des types de plat avec leurs comptages réels
   buildCatList();
-  // Défaut : tous les types de plat sélectionnés dans la catList
-  setTimeout(()=>{
-    document.querySelectorAll('.cat-item').forEach(el=>{
-      el.classList.add('active');
-      const c = parseInt(el.getAttribute('data-cat'));
-      st.catFilter.delete(c); // vide = tous
-    });
-    // Régime : aucun par défaut (st.diets est déjà vide)
-    // Saison : auto-détectée dans setSeason(autoSeason())
-  }, 100);
-
   if(st.allRecipes.length===0){
     document.getElementById('grid').innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">Aucune recette. <span style="text-decoration:underline;cursor:pointer" onclick="openSettings()">Vérifiez la configuration ⚙️</span></div>`;
   } else {
     setSeason(autoSeason());
   }
+}
+
+async function fetchSourceFromBlobs(srcKey){
+  // Cache localStorage 5 min pour éviter double-appel dans la même session
+  const ck = 'blobSrc_' + srcKey, cm = 'blobSrcM_' + srcKey;
+  try {
+    const m = JSON.parse(localStorage.getItem(cm)||'{}');
+    if(Date.now() - (m.ts||0) < 5*60*1000){
+      const c = JSON.parse(localStorage.getItem(ck)||'null');
+      if(c && c.length > 0) return c;
+    }
+  } catch(e){}
+
+  const r = await fetch(`/.netlify/functions/rebuild-db?action=get&source=${srcKey}`);
+  if(!r.ok) return [];
+  const data = await r.json();
+
+  const recipes = data.map(d => ({
+    id: d.id, src: d.src || srcKey,
+    title: d.title, photo: d.photo || null,
+    time: d.time || 0, ings: d.ings || [], steps: d.steps || [], cats: d.cats || [],
+    seasons: detectSeasons(d.title, d.ings || []),
+    style:   detectStyle(d.title, d.ings || []),
+    url: d.id,
+  }));
+
+  try {
+    localStorage.setItem(ck, JSON.stringify(recipes));
+    localStorage.setItem(cm, JSON.stringify({ts: Date.now()}));
+  } catch(e){}
+  return recipes;
 }
 
 async function loadBergamot(){
@@ -1417,7 +1417,7 @@ async function forceRefresh(){
   if(!confirm('Recharger toutes les recettes depuis Bergamot ?\n(peut prendre ~30 secondes)')) return;
   await clearBergamotCache();
   // Vider localStorage (sites externes + bergamot)
-  Object.keys(localStorage).filter(k=>k.startsWith('extR_')||k.startsWith('extM_')).forEach(k=>localStorage.removeItem(k));
+  Object.keys(localStorage).filter(k=>k.startsWith('extR_')||k.startsWith('extM_')||k.startsWith('blobSrc')).forEach(k=>localStorage.removeItem(k));
   // Note: les Blobs serveur expirent automatiquement après 30min/2h
   // On force le rechargement malgré un cache Blobs valide via _forceReload
   window._forceReload = true;  // bypass cache même si TTL pas expiré
@@ -1433,7 +1433,7 @@ async function forceRefresh(){
    SETTINGS PANEL
    ============================================================ */
 function openSettings(){
-  renderSetBerg(); renderSiteList('setExternalList');
+  renderSetBerg(); loadSourceCatalog();
   document.getElementById('settingsOverlay').classList.add('on');
 }
 function closeSettings(){ document.getElementById('settingsOverlay').classList.remove('on'); }
@@ -1928,6 +1928,94 @@ function setEl(id, prop, val){
    ============================================================ */
 init();
 
+
+
+/* ── CATALOGUE DES SOURCES ── */
+let sourceCatalogData = {};
+
+async function loadSourceCatalog(){
+  try {
+    const r = await fetch('/.netlify/functions/rebuild-db?action=list');
+    if(!r.ok) return;
+    sourceCatalogData = await r.json();
+    renderSourceCatalog();
+    renderRebuildSelect();
+  } catch(e){ console.warn('Catalog:', e); }
+}
+
+function renderSourceCatalog(){
+  const el = document.getElementById('sourceCatalog');
+  if(!el) return;
+  const BADGES = {vegan:'badge-vegan',healthy:'badge-healthy',bio:'badge-bio',general:'badge-general'};
+  const LABELS = {vegan:'Vegan',healthy:'Healthy',bio:'Bio',general:'Général'};
+  el.innerHTML = Object.entries(sourceCatalogData).map(([key, src]) => {
+    const active = (st.activeSources||[]).includes(key);
+    const age = src.updatedAt ? Math.round((Date.now()-src.updatedAt)/86400000) : null;
+    const ageTxt = age===null ? '⚠️ non indexé' : age===0 ? "aujourd'hui" : `il y a ${age}j`;
+    const badge = BADGES[src.specialty] || 'badge-general';
+    const label = LABELS[src.specialty] || src.specialty;
+    return `<div class="source-item${active?' active':''}" data-src="${key}" onclick="toggleSource('${key}')">
+      <span class="source-icon">${src.icon||'🌐'}</span>
+      <div class="source-info">
+        <div class="source-name">${src.name}</div>
+        <div class="source-meta">${src.cached ? src.count.toLocaleString('fr')+' recettes · '+ageTxt : '⚠️ pas encore indexé — cliquer Reconstruire'}</div>
+      </div>
+      <span class="source-badge ${badge}">${label}</span>
+      <div class="source-toggle"></div>
+    </div>`;
+  }).join('');
+}
+
+function renderRebuildSelect(){
+  const sel = document.getElementById('rebuildSourceSel');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— Source unique —</option>' +
+    Object.entries(sourceCatalogData).map(([k,s])=>
+      `<option value="${k}">${s.icon||''} ${s.name}</option>`).join('');
+}
+
+function toggleSource(key){
+  if(!st.activeSources) st.activeSources=[];
+  const idx = st.activeSources.indexOf(key);
+  if(idx>=0) st.activeSources.splice(idx,1);
+  else st.activeSources.push(key);
+  renderSourceCatalog();
+  saveCfg();
+}
+
+async function rebuildAll(){
+  await doRebuild(null);
+}
+async function rebuildOne(){
+  const key = document.getElementById('rebuildSourceSel')?.value;
+  if(!key){ alert('Sélectionnez une source'); return; }
+  await doRebuild(key);
+}
+
+async function doRebuild(sourceKey){
+  const logEl = document.getElementById('rebuildStatus');
+  const logBox = document.createElement('div');
+  logBox.className = 'rebuild-log on';
+  logEl.parentNode.insertBefore(logBox, logEl.nextSibling);
+
+  const url = '/.netlify/functions/rebuild-db?action=rebuild' + (sourceKey ? '&source='+sourceKey : '');
+  logBox.textContent = '⏳ Reconstruction en cours (peut prendre quelques minutes)…\n';
+  logEl.textContent = '';
+
+  try {
+    const r = await fetch(url, {method:'POST'});
+    const data = await r.json();
+    (data.log||[]).forEach(l => { logBox.textContent += l + '\n'; logBox.scrollTop=99999; });
+    logEl.textContent = data.ok ? '✅ Terminé' : '⚠️ Erreur';
+    // Recharger le catalogue
+    await loadSourceCatalog();
+    // Invalider le cache localStorage des sources reconstruites
+    Object.keys(localStorage).filter(k=>k.startsWith('blobSrc')).forEach(k=>localStorage.removeItem(k));
+  } catch(e){
+    logBox.textContent += '❌ Erreur: ' + e.message;
+    logEl.textContent = '❌ Erreur réseau';
+  }
+}
 
 /* ── SIDEBAR MOBILE ── */
 function toggleSidebar(){
