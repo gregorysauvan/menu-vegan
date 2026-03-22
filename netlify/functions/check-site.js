@@ -1,39 +1,29 @@
 const { getStore } = require('@netlify/blobs');
 
-const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
+const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 exports.handler = async (event) => {
   const url = event.queryStringParameters?.url;
   const force = event.queryStringParameters?.force === '1';
   if (!url) return { statusCode: 400, body: 'URL manquante' };
 
-  const store = getStore('recipes-cache');
-  const cacheKey = 'ext-' + Buffer.from(url).toString('base64').replace(/[^a-z0-9]/gi, '').slice(0, 60);
+  const store = getStore('pages-cache');
+  const cacheKey = 'p-' + Buffer.from(url).toString('base64').replace(/[^a-z0-9]/gi,'').slice(0,60);
 
-  // ── Cache Blobs pour les pages externes ──
   if (!force) {
     try {
-      const meta = await store.get(cacheKey + '-meta', { type: 'json' });
-      if (meta && Date.now() - meta.ts < TTL_MS) {
-        const cached = await store.get(cacheKey, { type: 'text' });
-        if (cached) {
-          return {
-            statusCode: meta.status || 200,
-            headers: {
-              'Content-Type': meta.ct || 'text/html',
-              'Access-Control-Allow-Origin': '*',
-              'X-WP-Total':      meta.wpTotal || '',
-              'X-WP-TotalPages': meta.wpPages || '',
-              'X-Cache': 'HIT',
-            },
-            body: cached,
-          };
-        }
+      const cached = await store.get(cacheKey, { type: 'json' });
+      if (cached && Date.now() - (cached.ts||0) < TTL_MS) {
+        return {
+          statusCode: cached.status || 200,
+          headers: { 'Content-Type': cached.ct || 'text/html', 'Access-Control-Allow-Origin': '*',
+            'X-WP-Total': cached.wpTotal||'', 'X-WP-TotalPages': cached.wpPages||'', 'X-Cache': 'HIT' },
+          body: cached.body,
+        };
       }
-    } catch (e) {}
+    } catch(e) {}
   }
 
-  // ── Fetch réel ──
   try {
     const res = await fetch(url, {
       headers: {
@@ -49,33 +39,19 @@ exports.handler = async (event) => {
     const wpTotal  = res.headers.get('X-WP-Total')      || '';
     const wpPages  = res.headers.get('X-WP-TotalPages') || '';
 
-    // Sauvegarder dans Blobs (seulement si pas trop gros)
-    if (body.length < 2 * 1024 * 1024) { // < 2 Mo
+    if (body.length < 2 * 1024 * 1024) {
       try {
-        await store.set(cacheKey, body);
-        await store.setJSON(cacheKey + '-meta', {
-          ts: Date.now(), ct, status: res.status,
-          wpTotal, wpPages,
-        });
-      } catch (e) {}
+        await store.setJSON(cacheKey, { ts: Date.now(), body, ct, status: res.status, wpTotal, wpPages });
+      } catch(e) {}
     }
 
     return {
       statusCode: res.status,
-      headers: {
-        'Content-Type': ct,
-        'Access-Control-Allow-Origin': '*',
-        'X-WP-Total':      wpTotal,
-        'X-WP-TotalPages': wpPages,
-        'X-Cache': 'MISS',
-      },
+      headers: { 'Content-Type': ct, 'Access-Control-Allow-Origin': '*',
+        'X-WP-Total': wpTotal, 'X-WP-TotalPages': wpPages, 'X-Cache': 'MISS' },
       body,
     };
-  } catch (e) {
-    return {
-      statusCode: 502,
-      headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ error: String(e) }),
-    };
+  } catch(e) {
+    return { statusCode: 502, headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ error: String(e) }) };
   }
 };
