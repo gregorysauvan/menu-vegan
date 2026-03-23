@@ -733,27 +733,22 @@ function setFirstDay(n){
 /* ── EXPORT PDF MENU ── */
 async function exportMenu(){
   if(!st.menu.length){ alert("Generez d'abord un menu."); return; }
-  if(typeof window.jspdf==='undefined'){ alert('PDF non disponible, rechargez la page.'); return; }
+  if(typeof window.jspdf==='undefined'){ alert('PDF non disponible.'); return; }
+
   var jsPDF=window.jspdf.jsPDF;
-  var doc=new jsPDF({unit:'mm',format:'a4'});
-  var ML=14,MT=14,MB=14,PW=210,PH=297,CW=182;
-  var y=MT;
-  function newPage(){ doc.addPage(); y=MT; }
-  function check(n){ if(y+n>PH-MB) newPage(); }
+  var PW=210,PH=297,ML=14,MT=14,MB=14,CW=182;
+
   function safe(s){
-    if(!s) return '';
-    var o='';
-    for(var i=0;i<String(s).length;i++){ var code=String(s).charCodeAt(i); if(code>=32&&code<=255) o+=String(s)[i]; }
+    if(!s)return'';var o='';
+    for(var i=0;i<String(s).length;i++){var code=String(s).charCodeAt(i);if(code>=32&&code<=255)o+=String(s)[i];}
     return o.trim();
   }
-  var MORD=['petitdej','dejeuner','gouter','diner'];
-  var moments=MORD.filter(function(m){ return st.mealTypes.has(m); });
 
   // Collecter toutes les recettes dans l'ordre agenda
   var allRecipes=[];
   st.menu.forEach(function(day,di){
     var daySvcs=getDayServices(di);
-    moments.forEach(function(mt){
+    getDayMoments(di).forEach(function(mt){
       var meal=day.meals[mt]; if(!meal) return;
       var svcs=SNACK_MOMENTS.has(mt)?['snack']:daySvcs;
       svcs.forEach(function(svc){
@@ -762,164 +757,176 @@ async function exportMenu(){
       });
     });
   });
-  // Assigner les numeros de page (page 1 = sommaire, recettes a partir de page 2)
-  allRecipes.forEach(function(item,i){ item.pageNum=i+2; });
 
-  // ── PAGE 1 : SOMMAIRE / AGENDA ──
-  doc.setFillColor(74,110,80); doc.rect(0,0,PW,20,'F');
+  // ── SIMULATION sommaire pour compter ses pages ──
+  function countSommPages(){
+    var y=MT+26; var pages=1;
+    function chk(n){ if(y+n>PH-MB){y=MT+16;pages++;} }
+    st.menu.forEach(function(day,di){
+      var daySvcs=getDayServices(di);
+      chk(10); y+=7;
+      getDayMoments(di).forEach(function(mt){
+        var meal=day.meals[mt]; if(!meal) return;
+        var svcs=SNACK_MOMENTS.has(mt)?['snack']:daySvcs;
+        if(!svcs.some(function(svc){return meal[svc];})) return;
+        chk(5); y+=5;
+        svcs.forEach(function(svc){ if(!meal[svc])return; chk(6); y+=6; });
+      });
+      y+=3;
+    });
+    return pages;
+  }
+
+  var sommPages=countSommPages();
+  // Chaque recette = exactement 1 page — numéros fixes
+  allRecipes.forEach(function(item,i){ item.pageNum=sommPages+1+i; });
+
+  var doc=new jsPDF({unit:'mm',format:'a4'});
+  var y=MT;
+
+  // ── SOMMAIRE ──
+  var sommPageNum=1;
+
+  function sommNewPage(){
+    sommPageNum++;
+    doc.addPage(); y=MT;
+    doc.setFillColor(74,110,80);doc.rect(0,0,PW,12,'F');
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold');doc.setFontSize(9);
+    doc.textWithLink('< Menu de la Semaine',ML,8,{pageNumber:1});
+    y=16;
+  }
+  function sommCheck(n){ if(y+n>PH-MB) sommNewPage(); }
+
+  // En-tête page 1
+  doc.setFillColor(74,110,80);doc.rect(0,0,PW,20,'F');
   doc.setTextColor(255,255,255);
-  doc.setFont('helvetica','bold'); doc.setFontSize(15);
-  doc.text('Menu de la Semaine',ML,10);
-  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.setFont('helvetica','bold');doc.setFontSize(15);
+  doc.text('Menu de la Semaine',ML,11);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
   doc.text(new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),ML,17);
   y=26;
 
   st.menu.forEach(function(day,di){
     var isSoir=day.isSoiree||st.soireeDays.has(di);
     var daySvcs=getDayServices(di);
-    check(10);
-    // Bandeau jour
-    doc.setFillColor.apply(doc, isSoir?[123,31,162]:[74,110,80]);
+    sommCheck(10);
+
+    doc.setFillColor.apply(doc,isSoir?[123,31,162]:[74,110,80]);
     doc.rect(ML,y,CW,6,'F');
-    doc.setTextColor(255,255,255);
-    doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
-    doc.text(safe(day.name).toUpperCase()||('JOUR '+(di+1)),ML+2,y+4.3);
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(8.5);
+    doc.text((safe(day.name)||'JOUR').toUpperCase(),ML+2,y+4.3);
     y+=7;
 
-    moments.forEach(function(mt){
+    getDayMoments(di).forEach(function(mt){
       var meal=day.meals[mt]; if(!meal) return;
       var svcs=SNACK_MOMENTS.has(mt)?['snack']:daySvcs;
-      var hasContent=svcs.some(function(svc){ return meal[svc]; });
-      if(!hasContent) return;
-
-      check(5);
-      doc.setFont('helvetica','italic'); doc.setFontSize(7);
-      doc.setTextColor(140,134,120);
+      if(!svcs.some(function(svc){return meal[svc];})) return;
+      sommCheck(5);
+      doc.setFont('helvetica','italic');doc.setFontSize(7);doc.setTextColor(140,134,120);
       doc.text(safe(MOMENT_LABELS[mt]||mt),ML+2,y+3.5);
       y+=5;
-
       svcs.forEach(function(svc){
         var r=meal[svc]; if(!r) return;
-        // Trouver le numero de page de cette recette
-        var found=allRecipes.filter(function(it){ return it.r===r; });
+        var found=allRecipes.filter(function(it){return it.r===r;});
         var pn=found.length?found[0].pageNum:0;
-        check(6);
-        // Label service
-        doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
-        doc.setTextColor(160,154,140);
+        sommCheck(6);
+        doc.setFont('helvetica','bold');doc.setFontSize(6.5);doc.setTextColor(160,154,140);
         doc.text(safe(COURSE_LABELS[svc]||svc).toUpperCase(),ML+4,y+3.8);
-        // Titre recette en vert avec lien interne vers la page
         var title=safe(r.title||'');
-        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
-        doc.setTextColor(74,110,80);
-        var tl=doc.splitTextToSize(title,CW-30);
-        // Lien interne : va a la page de la recette dans le PDF
-        doc.textWithLink(tl[0]||title, ML+20, y+3.8, {pageNumber:pn});
-        // Temps
-        if(r.time){
-          doc.setFont('helvetica','normal'); doc.setFontSize(6.5);
-          doc.setTextColor(160,154,140);
-          doc.text(r.time+' min',ML+CW,y+3.8,{align:'right'});
-        }
+        doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(74,110,80);
+        doc.textWithLink(doc.splitTextToSize(title,CW-32)[0]||title,ML+20,y+3.8,{pageNumber:pn});
+        doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(160,154,140);
+        doc.text('p.'+pn,ML+CW,y+3.8,{align:'right'});
+        doc.setDrawColor(220,215,205);doc.setLineWidth(0.1);
+        doc.line(ML+20,y+4.8,ML+CW-8,y+4.8);
         y+=6;
       });
     });
     y+=3;
   });
 
-  // ── PAGES RECETTES : 1 par page ──
-  allRecipes.forEach(function(item){
-    var r=item.r, day=item.day, di=item.di, mt=item.mt, svc=item.svc;
-    var isSoir=day.isSoiree||st.soireeDays.has(di);
-    newPage();
+  // Correction si simulation imprécise
+  var realSomm=doc.getCurrentPageInfo().pageNumber;
+  if(realSomm!==sommPages){
+    allRecipes.forEach(function(item,i){ item.pageNum=realSomm+1+i; });
+  }
 
-    // En-tete de page recette
-    doc.setFillColor.apply(doc, isSoir?[123,31,162]:[74,110,80]);
+  // ── PAGES RECETTES : 1 recette = 1 page exactement ──
+  allRecipes.forEach(function(item){
+    var r=item.r,day=item.day,di=item.di,mt=item.mt,svc=item.svc;
+    var isSoir=day.isSoiree||st.soireeDays.has(di);
+    doc.addPage();
+    var py=MT; // y local à cette page — on ne sort JAMAIS de cette page
+
+    // En-tête
+    doc.setFillColor.apply(doc,isSoir?[123,31,162]:[74,110,80]);
     doc.rect(0,0,PW,22,'F');
     doc.setTextColor(255,255,255);
-    // Fil d'Ariane : Jour > Moment > Service
-    doc.setFont('helvetica','normal'); doc.setFontSize(7);
+    doc.setFont('helvetica','normal');doc.setFontSize(7);
     doc.text(safe(day.name)+' > '+safe(MOMENT_LABELS[mt]||mt)+' > '+safe(COURSE_LABELS[svc]||svc),ML,8);
-    // Titre recette
-    doc.setFont('helvetica','bold'); doc.setFontSize(13);
-    var titleFull=safe(r.title||'Recette');
-    var titleLines=doc.splitTextToSize(titleFull,CW);
-    doc.text(titleLines[0],ML,16);
-    y=28;
+    doc.setFont('helvetica','bold');doc.setFontSize(13);
+    doc.text(doc.splitTextToSize(safe(r.title||'Recette'),CW)[0],ML,17);
+    py=28;
 
     // Temps + URL source
-    var metaLine='';
-    if(r.time) metaLine+=r.time+' min';
     var rid=String(r.id||'');
-    if(rid.startsWith('http')){
-      var shortUrl=rid.replace(/^https?:\/\/(www\.)?/,'').slice(0,80);
-      if(metaLine) metaLine+='   |   ';
-      metaLine+=shortUrl;
+    var meta='';
+    if(r.time)meta+=r.time+' min';
+    if(rid.startsWith('http')){if(meta)meta+='   |   ';meta+=rid.replace(/^https?:\/\/(www\.)?/,'').slice(0,70);}
+    if(meta){
+      doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(100,140,105);
+      doc.text(meta,ML,py);py+=7;
     }
-    if(metaLine){
-      doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
-      doc.setTextColor(100,140,105);
-      doc.text(metaLine,ML,y);
-      y+=7;
-    }
+    doc.setDrawColor(200,195,185);doc.setLineWidth(0.3);doc.line(ML,py,ML+CW,py);py+=5;
 
-    // Separateur
-    doc.setDrawColor(200,195,185); doc.setLineWidth(0.3);
-    doc.line(ML,y,ML+CW,y); y+=6;
+    // Calculer l'espace restant et adapter les tailles
+    var spaceLeft=PH-MB-2-py; // espace pour ingrédients + étapes
+    var ingsCount=(r.ings||[]).length;
+    var stepsCount=(r.steps||[]).length;
+    // Taille de police adaptée si beaucoup de contenu
+    var fsize=(ingsCount+stepsCount)>15 ? 7 : (ingsCount+stepsCount)>10 ? 7.5 : 8.5;
+    var lineH=fsize*0.55+1.5;
 
-    // Ingredients
+    // Ingrédients
     if(r.ings&&r.ings.length){
-      doc.setFont('helvetica','bold'); doc.setFontSize(10);
-      doc.setTextColor(74,110,80);
-      doc.text('Ingredients',ML,y); y+=6;
-      doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-      doc.setTextColor(40,40,35);
+      doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(74,110,80);
+      doc.text('Ingredients',ML,py);py+=5;
+      doc.setFont('helvetica','normal');doc.setFontSize(fsize);doc.setTextColor(40,40,35);
       r.ings.forEach(function(ing){
-        var s=safe(ing); if(!s) return;
-        check(6);
-        doc.setFillColor(180,205,183);
-        doc.circle(ML+2,y-0.8,0.8,'F');
-        var il=doc.splitTextToSize(s,CW-8);
-        doc.text(il[0],ML+5,y);
-        y+=5.5;
+        var s=safe(ing);if(!s||py>PH-MB-20)return;
+        doc.setFillColor(180,205,183);doc.circle(ML+2,py-0.5,0.7,'F');
+        doc.text(doc.splitTextToSize(s,CW-7)[0],ML+5,py);
+        py+=lineH;
       });
-      y+=4;
+      py+=2;
     }
 
-    // Etapes
-    if(r.steps&&r.steps.length){
-      check(10);
-      doc.setDrawColor(200,195,185); doc.setLineWidth(0.2);
-      doc.line(ML,y,ML+CW,y); y+=5;
-      doc.setFont('helvetica','bold'); doc.setFontSize(10);
-      doc.setTextColor(74,110,80);
-      doc.text('Preparation',ML,y); y+=6;
+    // Étapes
+    if(r.steps&&r.steps.length&&py<PH-MB-20){
+      doc.setDrawColor(200,195,185);doc.setLineWidth(0.2);doc.line(ML,py,ML+CW,py);py+=4;
+      doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(74,110,80);
+      doc.text('Preparation',ML,py);py+=5;
+      doc.setFont('helvetica','normal');doc.setFontSize(fsize);doc.setTextColor(40,40,35);
       r.steps.forEach(function(step,si){
-        var s=safe(step); if(!s) return;
-        check(10);
-        // Numero etape
-        doc.setFillColor(74,110,80);
-        doc.circle(ML+3,y-0.8,3,'F');
-        doc.setTextColor(255,255,255);
-        doc.setFont('helvetica','bold'); doc.setFontSize(7);
-        doc.text(String(si+1),ML+3,y+0.5,{align:'center'});
-        // Texte etape
-        doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-        doc.setTextColor(40,40,35);
-        var sl=doc.splitTextToSize(s,CW-10);
-        sl.forEach(function(line,li){
-          if(li>0) check(5);
-          doc.text(line,ML+9,y+(li*5));
-        });
-        y+=Math.max(sl.length*5,7)+3;
+        var s=safe(step);if(!s||py>PH-MB-12)return;
+        doc.setFillColor(74,110,80);doc.circle(ML+3,py-0.5,2.5,'F');
+        doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(6);
+        doc.text(String(si+1),ML+3,py+0.4,{align:'center'});
+        doc.setFont('helvetica','normal');doc.setFontSize(fsize);doc.setTextColor(40,40,35);
+        var sl=doc.splitTextToSize(s,CW-9);
+        var linesToShow=Math.min(sl.length,2);
+        for(var li=0;li<linesToShow;li++){
+          if(py>PH-MB-10)break;
+          doc.text(sl[li],ML+8,py+(li*lineH));
+        }
+        py+=Math.max(linesToShow*lineH,lineH)+2;
       });
     }
 
-    // Lien retour sommaire
-    check(8);
-    doc.setFont('helvetica','italic'); doc.setFontSize(7);
-    doc.setTextColor(140,134,120);
-    doc.textWithLink('< Retour au sommaire',ML,PH-MB-2,{pageNumber:1});
+    // Retour sommaire — toujours page 1
+    doc.setFont('helvetica','italic');doc.setFontSize(7);doc.setTextColor(140,134,120);
+    doc.textWithLink('< Retour au sommaire',ML,PH-8,{pageNumber:1});
   });
 
   doc.save('menu-'+new Date().toISOString().slice(0,10)+'.pdf');
