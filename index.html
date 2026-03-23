@@ -607,6 +607,32 @@ function getDayMoments(dayIdx){
   return ['petitdej','dejeuner','gouter','diner'].filter(m=>st.mealTypes.has(m));
 }
 
+function getDayServices(dayIdx){
+  if(isSoireeDay(dayIdx)) return ['apero','entree','plat','dessert'];
+  const custom = st.dayStructures[dayIdx];
+  if(custom) return custom;
+  return [...st.courseTypes];
+}
+
+function toggleDayService(dayIdx, svc){
+  const current = getDayServices(dayIdx);
+  const isSoiree = isSoireeDay(dayIdx);
+  if(isSoiree){
+    if(svc === 'plat') return;
+    const idx = current.indexOf(svc);
+    const newServices = idx>=0 ? current.filter(s=>s!==svc) : [...current, svc];
+    const order = ['apero','entree','plat','dessert'];
+    st.dayStructures[dayIdx] = order.filter(s=>newServices.includes(s));
+  } else {
+    if(svc === 'plat') return;
+    const idx = current.indexOf(svc);
+    const newServices = idx>=0 ? current.filter(s=>s!==svc) : [...current, svc];
+    const order = ['entree','plat','dessert'];
+    st.dayStructures[dayIdx] = order.filter(s=>newServices.includes(s));
+  }
+  regenerateDay(dayIdx);
+}
+
 function toggleDayMoment(dayIdx, mt){
   const current = getDayMoments(dayIdx).slice(); // copie
   const pos = current.indexOf(mt);
@@ -899,6 +925,8 @@ async function exportMenu(){
   doc.save('menu-'+new Date().toISOString().slice(0,10)+'.pdf');
 }
 
+
+function loadCatalog(){ loadSourceCatalog(); }
 
 async function init(){
   if(!getCookie('menuCookieOk'))document.getElementById('cookieBanner').style.display='flex';
