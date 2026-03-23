@@ -1140,7 +1140,7 @@ function renderAgenda(g){
     // Boutons moments du jour
     const allMts=['petitdej','dejeuner','gouter','diner'];
     const activeMts=getDayMoments(di);
-    const mtLabels={petitdej:'P',dejeuner:'D',gouter:'G',diner:'S'};
+    const mtLabels={petitdej:'🌅',dejeuner:'🌞',gouter:'🌤',diner:'🌙'};
     const momentBtns=allMts.filter(m=>st.mealTypes.has(m)).map(m=>{
       const on=activeMts.includes(m);
       return `<button class="day-moment-btn${on?' on':''}"
@@ -1156,7 +1156,7 @@ function renderAgenda(g){
     </div>`;
     const dayActiveMts=getDayMoments(di);
     if(dayActiveMts.length===1){const mt=dayActiveMts[0];const svcs=SNACK_MOMENTS.has(mt)?['snack']:getDayServices(di);h+=`<div style="padding:8px 12px"><div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:6px">${MOMENT_LABELS[mt]||mt}</div>`;for(const svc of svcs)h+=recipeRow(day.meals[mt]?.[svc],di,mt,svc);h+=`</div>`;}
-    else{h+=`<div style="display:grid;grid-template-columns:1fr 1fr">`;moments.forEach((mt,idx)=>{const svcs=SNACK_MOMENTS.has(mt)?['snack']:getDayServices(di);const col=idx%COLS;const row=Math.floor(idx/COLS);const borderR=col<COLS-1?'border-right:1px solid var(--warm);':'';const borderT=row>0?'border-top:1px solid var(--warm);':'';h+=`<div style="padding:8px 10px;${borderR}${borderT}"><div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:5px">${MOMENT_LABELS[mt]||mt}</div>`;for(const svc of svcs)h+=recipeRow(day.meals[mt]?.[svc],di,mt,svc);h+=`</div>`;});h+=`</div>`;}
+    else{h+=`<div style="display:grid;grid-template-columns:1fr 1fr">`;dayActiveMts.forEach((mt,idx)=>{const svcs=SNACK_MOMENTS.has(mt)?['snack']:getDayServices(di);const col=idx%COLS;const row=Math.floor(idx/COLS);const borderR=col<COLS-1?'border-right:1px solid var(--warm);':'';const borderT=row>0?'border-top:1px solid var(--warm);':'';h+=`<div style="padding:8px 10px;${borderR}${borderT}"><div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:5px">${MOMENT_LABELS[mt]||mt}</div>`;for(const svc of svcs)h+=recipeRow(day.meals[mt]?.[svc],di,mt,svc);h+=`</div>`;});h+=`</div>`;}
     card.innerHTML=h;g.appendChild(card);
   });
 }
