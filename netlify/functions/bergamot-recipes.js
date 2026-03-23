@@ -6,22 +6,23 @@ export default async (req, context) => {
   const token = req.headers.get('authorization') || req.headers.get('Authorization');
   if (!token) return new Response('Token manquant', { status: 401 });
 
-  const store = getStore('recipes-cache');
+  // Nouveau store — évite les conflits avec l'ancien recipes-cache supprimé
+  const store = getStore('bergamot-cache');
   const url = new URL(req.url);
   const force = url.searchParams.get('force') === '1';
 
   if (!force) {
     try {
-      const meta = await store.get('bergamot-meta', { type: 'json' });
+      const meta = await store.get('meta', { type: 'json' });
       if (meta && Date.now() - meta.ts < TTL_MS) {
-        const cached = await store.get('bergamot-recipes', { type: 'json' });
+        const cached = await store.get('recipes', { type: 'json' });
         if (cached && cached.length > 0) {
           return new Response(JSON.stringify(cached), {
             headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
           });
         }
       }
-    } catch (e) { console.warn('Blobs read:', e.message); }
+    } catch (e) {}
   }
 
   try {
@@ -47,9 +48,9 @@ export default async (req, context) => {
     }
 
     try {
-      await store.setJSON('bergamot-recipes', out);
-      await store.setJSON('bergamot-meta', { ts: Date.now(), count: out.length });
-    } catch (e) { console.warn('Blobs write:', e.message); }
+      await store.setJSON('recipes', out);
+      await store.setJSON('meta', { ts: Date.now(), count: out.length });
+    } catch (e) {}
 
     return new Response(JSON.stringify(out), {
       headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' },
@@ -59,4 +60,3 @@ export default async (req, context) => {
   }
 };
 
-export const config = { path: '/.netlify/functions/bergamot-recipes' };

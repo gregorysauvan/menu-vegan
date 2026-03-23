@@ -60,4 +60,3 @@ export default async (req, context) => {
   }
 };
 
-export const config = { path: '/.netlify/functions/check-site' };

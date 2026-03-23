@@ -21,7 +21,7 @@ const SOURCES = {
 };
 
 export default async (req) => {
-  const store = getStore('recipes-cache');
+  const store = getStore('recettes-v2');
   const url   = new URL(req.url);
   const action = url.searchParams.get('action') || 'list';
 
@@ -83,4 +83,3 @@ export default async (req) => {
   return new Response('action inconnue', { status: 400 });
 };
 
-export const config = { path: '/.netlify/functions/rebuild-db' };
