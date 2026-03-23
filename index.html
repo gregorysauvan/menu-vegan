@@ -240,6 +240,43 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .btn-soiree.on{background:#9c27b0;color:#fff;}
 .btn-soiree:hover{border-color:#7b1fa2;}
 
+/* ── GRAND LIVRE MODAL ── */
+.gl-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center;padding:16px;}
+.gl-overlay.open{display:flex;}
+.gl-modal{background:var(--white);border-radius:14px;width:100%;max-width:720px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.18);}
+.gl-head{background:var(--sage-dark);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:12px;}
+.gl-head h2{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:400;flex:1;margin:0;}
+.gl-close{background:none;border:none;color:rgba(255,255,255,.7);font-size:1.4rem;cursor:pointer;padding:0 4px;line-height:1;}
+.gl-close:hover{color:#fff;}
+.gl-toolbar{padding:12px 16px;background:var(--cream);border-bottom:1px solid var(--warm);display:flex;gap:8px;flex-wrap:wrap;}
+.gl-search{flex:1;min-width:180px;font-family:inherit;font-size:.85rem;border:1px solid var(--warm);border-radius:8px;padding:8px 12px;background:var(--white);color:var(--ink);outline:none;}
+.gl-search:focus{border-color:var(--sage);}
+.gl-filter{font-family:inherit;font-size:.78rem;border:1px solid var(--warm);border-radius:8px;padding:7px 10px;background:var(--white);color:var(--ink);cursor:pointer;outline:none;}
+.gl-stats{font-size:.72rem;color:var(--muted);display:flex;align-items:center;width:100%;}
+.gl-pinned-bar{padding:8px 16px;background:#e8f0fb;border-bottom:1px solid #c5d5ef;display:none;flex-wrap:wrap;gap:6px;align-items:center;}
+.gl-pinned-bar.has-pins{display:flex;}
+.gl-pinned-label{font-size:.7rem;font-weight:600;color:#3d5a8a;text-transform:uppercase;letter-spacing:.04em;}
+.gl-pin-chip{display:inline-flex;align-items:center;gap:4px;background:#3d5a8a;color:#fff;border-radius:12px;padding:2px 8px;font-size:.72rem;}
+.gl-pin-chip button{background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;font-size:.85rem;padding:0;line-height:1;}
+.gl-pin-chip button:hover{color:#fff;}
+.gl-list{flex:1;overflow-y:auto;padding:10px 16px;display:flex;flex-direction:column;gap:8px;}
+.gl-card{background:var(--white);border:1px solid var(--warm);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:12px;transition:border-color .15s;}
+.gl-card:hover{border-color:var(--sage-light);}
+.gl-card.pinned{border-color:#3d5a8a;background:#f0f4fb;}
+.gl-card-img{width:44px;height:44px;border-radius:7px;object-fit:cover;background:var(--warm);flex-shrink:0;}
+.gl-card-img-ph{width:44px;height:44px;border-radius:7px;background:var(--warm);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem;}
+.gl-card-info{flex:1;min-width:0;}
+.gl-card-title{font-weight:500;font-size:.88rem;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.gl-card-meta{font-size:.72rem;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;}
+.gl-card-badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:.65rem;font-weight:500;}
+.badge-berg{background:#e8f0fb;color:#3d5a8a;}
+.badge-ext{background:#e8f5e9;color:#2e7d32;}
+.gl-pin-btn{padding:5px 11px;border-radius:8px;font-size:.75rem;font-weight:500;cursor:pointer;border:1.5px solid var(--sage);background:var(--white);color:var(--sage-dark);font-family:inherit;transition:all .15s;white-space:nowrap;}
+.gl-pin-btn.active{background:var(--sage-dark);color:#fff;border-color:var(--sage-dark);}
+.gl-pin-btn:hover{background:var(--sage-dark);color:#fff;}
+.gl-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:.85rem;}
+@media(max-width:600px){.gl-modal{max-height:95vh;border-radius:10px 10px 0 0;}.gl-overlay{align-items:flex-end;padding:0;}. gl-card-img,.gl-card-img-ph{width:36px;height:36px;}}
+
 /* ── STRUCTURE PAR JOUR ── */
 .day-struct{display:flex;gap:3px;margin-top:5px;flex-wrap:wrap;}
 .day-struct-btn{padding:2px 7px;border-radius:10px;font-size:.62rem;font-weight:500;cursor:pointer;border:1px solid var(--warm);background:var(--cream);color:var(--muted);font-family:inherit;touch-action:manipulation;transition:all .12s;}
@@ -410,6 +447,7 @@ header h1 span{color:var(--sage-light);font-style:italic;}
           <button class="tgl-btn active" data-ct="dessert" onclick="toggleCourseType('dessert')">🍰 Dessert</button>
         </div>
       </div>
+      <button class="btn-gen-bar" onclick="openBook()" style="background:#3d5a8a" title="Grand Livre des recettes">📖 Grand Livre</button>
       <button class="btn-soiree" id="btnSoiree" onclick="addSoireeDay()" title="Ajouter un jour Soirée">🥂 + Soirée</button>
       <button class="btn-gen-bar" onclick="generate()">🎲 Générer</button>
       <button class="btn-gen-bar" onclick="exportMenu()" style="background:var(--earth)" title="Exporter le menu en texte">📤</button>
@@ -515,7 +553,7 @@ const PROT_KW=['tofu','tempeh','seitan','lentille','pois chiche','haricot','soja
 const PROT_TIPS={pa:["Ajouter 150g de tofu sauté","Servir avec des lentilles"],gr:["Émietter du tofu fumé","Ajouter des pois chiches"],sa:["Ajouter du tofu mariné","Parsemer d'edamame"],so:["Ajouter des lentilles corail","Incorporer des haricots blancs"],ri:["Servir avec du tempeh grillé","Parsemer d'edamame"],co:["Ajouter des pois chiches rôtis","Incorporer des lentilles"],mi:["Ajouter du seitan","Incorporer des lentilles"],as:["Ajouter du tofu croustillant","Incorporer du tempeh mariné"],pi:["Ajouter du tofu émietté","Incorporer des pois chiches"],bu:["Steak de tofu","Galette de pois chiches"],x:["Ajouter 150g de tofu ferme","Servir avec des pois chiches rôtis"]};
 const SB_INFO={p:{c:'sb-p',i:'🌸'},s:{c:'sb-s',i:'☀️'},a:{c:'sb-a',i:'🍂'},w:{c:'sb-w',i:'❄️'}};
 const SC={spring:'p',summer:'s',autumn:'a',winter:'w'};
-const st={allRecipes:[],pool:[],menu:[],ideas:[],stock:[],season:'all',strict:false,prot:false,courses:false,bergPriority:false,diets:new Set(),catFilter:new Set(),activeSources:[],mealTypes:new Set(['dejeuner','diner']),courseTypes:new Set(['entree','plat','dessert']),viewMode:'agenda',token:null,sites:[],soireeDays:new Set(),dayStructures:{},dayMoments:{},firstDay:1,_wantSoiree:false};
+const st={allRecipes:[],pool:[],menu:[],ideas:[],stock:[],season:'all',strict:false,prot:false,courses:false,bergPriority:false,diets:new Set(),catFilter:new Set(),activeSources:[],mealTypes:new Set(['dejeuner','diner']),courseTypes:new Set(['entree','plat','dessert']),viewMode:'agenda',token:null,sites:[],soireeDays:new Set(),dayStructures:{},dayMoments:{},firstDay:1,_wantSoiree:false,pinnedRecipes:[],bookSearch:'',bookFilter:'all'};
 
 function loadCfg(){try{const raw=localStorage.getItem(CFG_KEY)||getCookie(CFG_KEY);if(raw)return JSON.parse(raw);}catch{}return null;}
 function saveCfg(){const d={token:st.token,sites:st.sites,activeSources:st.activeSources};const json=JSON.stringify(d);try{localStorage.setItem(CFG_KEY,json);}catch{}if(getCookie('menuCookieOk')==='1')setCookie(CFG_KEY,json,365);}
@@ -933,6 +971,184 @@ async function exportMenu(){
 }
 
 
+/* ── GRAND LIVRE DES RECETTES ── */
+
+function openBook(){
+  document.getElementById('glOverlay').classList.add('open');
+  document.body.style.overflow='hidden';
+  renderBook();
+}
+
+function closeBook(){
+  document.getElementById('glOverlay').classList.remove('open');
+  document.body.style.overflow='';
+}
+
+// Fermer avec Escape
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape') closeBook();
+});
+
+function togglePin(recipeId){
+  const idx = st.pinnedRecipes.indexOf(recipeId);
+  if(idx>=0) st.pinnedRecipes.splice(idx,1);
+  else st.pinnedRecipes.push(recipeId);
+  renderBook();
+  updatePinnedBar();
+}
+
+function updatePinnedBar(){
+  const bar = document.getElementById('glPinnedBar');
+  const chips = document.getElementById('glPinnedChips');
+  if(!st.pinnedRecipes.length){ bar.classList.remove('has-pins'); return; }
+  bar.classList.add('has-pins');
+  chips.innerHTML = st.pinnedRecipes.map(id=>{
+    const r = getRecipeById(id);
+    const name = r ? (r.title||r.t||'').slice(0,30) : id.toString().slice(0,20);
+    return `<span class="gl-pin-chip">${name}<button onclick="togglePin('${id}')" title="Retirer">×</button></span>`;
+  }).join('');
+}
+
+function getRecipeById(id){
+  // Chercher dans Bergamot
+  const berg = st.allRecipes.find(r=>r.id===id);
+  if(berg) return berg;
+  // Chercher dans le pool étendu
+  return null;
+}
+
+function getBookRecipes(){
+  // Combiner recettes Bergamot + recettes indexées du pool
+  const bergRecipes = st.allRecipes.map(r=>({
+    id: r.id,
+    title: r.title||r.t||'',
+    time: r.time||r.tm||0,
+    photo: r.photo||r.p||null,
+    ings: r.ings||r.in||[],
+    cats: r.cats||r.c||[],
+    src: 'bergamot',
+    srcLabel: 'Bergamot'
+  }));
+
+  // Recettes indexées (depuis le pool chargé)
+  const extRecipes = (st.pool||[])
+    .filter(r=>r.src && r.src!=='bergamot')
+    .map(r=>({
+      id: r.id,
+      title: r.title||'',
+      time: r.time||0,
+      photo: r.photo||null,
+      ings: r.ings||[],
+      cats: r.cats||[],
+      src: 'ext',
+      srcLabel: r.src||'Site indexé'
+    }));
+
+  // Dédupliquer par id
+  const seen = new Set();
+  return [...bergRecipes, ...extRecipes].filter(r=>{
+    if(!r.title || seen.has(r.id)) return false;
+    seen.add(r.id);
+    return true;
+  });
+}
+
+function guessTypeFromCats(cats){
+  const ENTREE=[8602,15947,8610,31409];
+  const PLAT=[8603,16929,15982,35459,35460];
+  const DESSERT=[8604,8606];
+  const PDJ=[8608];
+  if(!cats||!cats.length) return 'plat';
+  if(cats.some(c=>DESSERT.includes(c))) return 'dessert';
+  if(cats.some(c=>PDJ.includes(c))) return 'petitdej';
+  if(cats.some(c=>ENTREE.includes(c))) return 'entree';
+  if(cats.some(c=>PLAT.includes(c))) return 'plat';
+  return 'plat';
+}
+
+function renderBook(){
+  const query = (document.getElementById('glSearch')?.value||'').toLowerCase().trim();
+  const typeFilter = document.getElementById('glFilter')?.value||'all';
+  const srcFilter = document.getElementById('glSource')?.value||'all';
+
+  let recipes = getBookRecipes();
+
+  // Filtre source
+  if(srcFilter==='bergamot') recipes = recipes.filter(r=>r.src==='bergamot');
+  else if(srcFilter==='ext') recipes = recipes.filter(r=>r.src==='ext');
+
+  // Filtre type
+  if(typeFilter!=='all'){
+    recipes = recipes.filter(r=>{
+      const t = guessTypeFromCats(r.cats);
+      return t===typeFilter;
+    });
+  }
+
+  // Filtre recherche
+  if(query){
+    recipes = recipes.filter(r=>{
+      const title = (r.title||'').toLowerCase();
+      const ings = (r.ings||[]).join(' ').toLowerCase();
+      return title.includes(query) || ings.includes(query);
+    });
+  }
+
+  // Stats
+  const stats = document.getElementById('glStats');
+  if(stats) stats.textContent = `${recipes.length} recette${recipes.length>1?'s':''} trouvée${recipes.length>1?'s':''}`;
+
+  // Rendu
+  const list = document.getElementById('glList');
+  if(!list) return;
+
+  if(!recipes.length){
+    list.innerHTML = '<div class="gl-empty">Aucune recette ne correspond à cette recherche.</div>';
+    return;
+  }
+
+  // Trier : épinglées en premier, puis par titre
+  recipes.sort((a,b)=>{
+    const aPin = st.pinnedRecipes.includes(a.id)?0:1;
+    const bPin = st.pinnedRecipes.includes(b.id)?0:1;
+    if(aPin!==bPin) return aPin-bPin;
+    return (a.title||'').localeCompare(b.title||'', 'fr');
+  });
+
+  list.innerHTML = recipes.map(r=>{
+    const pinned = st.pinnedRecipes.includes(r.id);
+    const type = guessTypeFromCats(r.cats);
+    const typeLabels = {entree:'Entrée',plat:'Plat',dessert:'Dessert',petitdej:'Petit-déj'};
+    const imgHtml = r.photo
+      ? `<img class="gl-card-img" src="${r.photo}" alt="" loading="lazy" onerror="this.style.display='none'">`
+      : `<div class="gl-card-img-ph">${type==='dessert'?'🍰':type==='entree'?'🥗':type==='petitdej'?'☀️':'🍲'}</div>`;
+    const timeStr = r.time ? `⏱ ${r.time} min` : '';
+    const srcBadge = r.src==='bergamot'
+      ? '<span class="gl-card-badge badge-berg">Bergamot</span>'
+      : `<span class="gl-card-badge badge-ext">${r.srcLabel}</span>`;
+
+    return `<div class="gl-card${pinned?' pinned':''}">
+      ${imgHtml}
+      <div class="gl-card-info">
+        <div class="gl-card-title">${r.title||''}</div>
+        <div class="gl-card-meta">
+          ${typeStr(typeLabels[type]||type)}
+          ${timeStr ? `<span>${timeStr}</span>` : ''}
+          ${srcBadge}
+        </div>
+      </div>
+      <button class="gl-pin-btn${pinned?' active':''}" onclick="togglePin(${JSON.stringify(r.id)})">
+        ${pinned ? '✓ Épinglé' : '+ Épingler'}
+      </button>
+    </div>`;
+  }).join('');
+
+  updatePinnedBar();
+}
+
+function typeStr(label){ return label ? `<span>${label}</span>` : ''; }
+
+
 function loadCatalog(){ loadSourceCatalog(); }
 
 async function init(){
@@ -1064,7 +1280,8 @@ function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.fl
 
 function generate(){
   if(!st.pool.length){alert('Aucune recette ne correspond aux filtres.');return;}
-  const N=parseInt(document.getElementById('mealCount').value)||6;const pool=getWeightedPool(getPool());if(!pool.length){alert('Aucune recette pour ces filtres.');return;}
+  const N=parseInt(document.getElementById('mealCount').value)||6;const pool=getWeightedPool(getPool());if(!pool.length){alert('Aucune recette pour ces filtres.');retu
+  const pinnedInPool=(st.pinnedRecipes||[]).map(id=>pool.find(r=>String(r.id)===String(id))).filter(Boolean);rn;}
   const moments=['petitdej','dejeuner','gouter','diner'].filter(m=>st.mealTypes.has(m));
   const allSnack=[...st.mealTypes].every(m=>SNACK_MOMENTS.has(m));const services=allSnack?['snack']:[...st.courseTypes];
   const poolByCourse={};const allServices=[...new Set([...services,'snack'])];
@@ -1235,5 +1452,39 @@ function renderSourceCatalog(){
 function toggleSource(key){if(!st.activeSources)st.activeSources=[];const idx=st.activeSources.indexOf(key);if(idx>=0)st.activeSources.splice(idx,1);else st.activeSources.push(key);renderSourceCatalog();saveCfg();}
 
 </script>
+
+<!-- ── GRAND LIVRE DES RECETTES ── -->
+<div class="gl-overlay" id="glOverlay" onclick="if(event.target===this)closeBook()">
+  <div class="gl-modal">
+    <div class="gl-head">
+      <h2>📖 Grand Livre des Recettes</h2>
+      <button class="gl-close" onclick="closeBook()">×</button>
+    </div>
+    <div class="gl-toolbar">
+      <input class="gl-search" id="glSearch" type="search" placeholder="Rechercher par nom, ingrédient…" oninput="renderBook()">
+      <select class="gl-filter" id="glFilter" onchange="renderBook()">
+        <option value="all">Tous les types</option>
+        <option value="entree">Entrées</option>
+        <option value="plat">Plats</option>
+        <option value="dessert">Desserts</option>
+        <option value="petitdej">Petit-déj</option>
+      </select>
+      <select class="gl-filter" id="glSource" onchange="renderBook()">
+        <option value="all">Toutes les sources</option>
+        <option value="bergamot">Bergamot</option>
+        <option value="ext">Sites indexés</option>
+      </select>
+      <div class="gl-stats" id="glStats"></div>
+    </div>
+    <div class="gl-pinned-bar" id="glPinnedBar">
+      <span class="gl-pinned-label">Épinglés pour le prochain menu :</span>
+      <div id="glPinnedChips"></div>
+    </div>
+    <div class="gl-list" id="glList">
+      <div class="gl-empty">Chargement des recettes…</div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
