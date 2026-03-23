@@ -201,8 +201,9 @@ async function fetchWpCategoryMap(base) {
     if (!r.ok) return map;
     const cats = await r.json();
     for (const cat of cats) {
-      const s = cat.slug.toLowerCase();
-      const n = cat.name.toLowerCase().replace(/&amp;/g,'').replace(/[^a-zàâäéèêëîïôùûüç0-9\s-]/g,'');
+      if(!cat || !cat.slug || !cat.name) continue;
+      const s = (cat.slug||'').toLowerCase();
+      const n = (cat.name||'').toLowerCase().replace(/&amp;/g,'').replace(/[^a-zàâäéèêëîïôùûüç0-9\s-]/g,'');
       const all = s + ' ' + n;
       let mapped = null;
 
@@ -242,8 +243,8 @@ const _wpCatMapCache = {};
 // ── DÉTECTION AUTOMATIQUE DE CATÉGORIE ──────────────────────────
 // IDs internes : 8602=Entrée  8603=Plat principal  8604=Dessert  8608=Petit-déj/Goûter
 function guessCats(title, ings, jsonldCat, jsonldKw){
-  const t   = title.toLowerCase();
-  const i   = ings.join(' ').toLowerCase();
+  const t   = (title||'').toLowerCase();
+  const i   = (Array.isArray(ings)?ings:[]).join(' ').toLowerCase();
   const cat = (jsonldCat||'').toLowerCase();
   const kw  = (jsonldKw||'').toLowerCase();
   const all = t + ' ' + cat + ' ' + kw;
