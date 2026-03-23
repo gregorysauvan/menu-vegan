@@ -245,9 +245,9 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .day-struct-btn{padding:2px 7px;border-radius:10px;font-size:.62rem;font-weight:500;cursor:pointer;border:1px solid var(--warm);background:var(--cream);color:var(--muted);font-family:inherit;touch-action:manipulation;transition:all .12s;}
 .day-struct-btn.on{background:var(--sage-dark);color:#fff;border-color:var(--sage-dark);}
 .day-struct-btn.soiree-on{background:#9c27b0;color:#fff;border-color:#9c27b0;}
-.day-moment-btn{padding:2px 6px;border-radius:10px;font-size:.60rem;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:rgba(255,255,255,.8);font-family:inherit;touch-action:manipulation;transition:all .12s;}
-.day-moment-btn.on{background:rgba(255,255,255,.9);color:var(--sage-dark);}
-.day-moment-btn:hover{background:rgba(255,255,255,.3);}
+.day-moment-btn{padding:2px 7px;border-radius:10px;font-size:.65rem;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.15);color:rgba(255,255,255,.6);font-family:inherit;touch-action:manipulation;transition:all .12s;letter-spacing:.02em;}
+.day-moment-btn.on{background:rgba(255,255,255,.92);color:var(--sage-dark);border-color:transparent;}
+.day-moment-btn:hover{background:rgba(255,255,255,.25);color:#fff;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
@@ -608,54 +608,57 @@ function getDayMoments(dayIdx){
 }
 
 function toggleDayMoment(dayIdx, mt){
-  const current = getDayMoments(dayIdx);
-  const idx = current.indexOf(mt);
-  let next;
-  if(idx >= 0){
-    if(current.length <= 1) return; // garder au moins 1 moment
-    next = current.filter(m=>m!==mt);
+  const current = getDayMoments(dayIdx).slice(); // copie
+  const pos = current.indexOf(mt);
+  if(pos >= 0){
+    if(current.length <= 1) return;
+    st.dayMoments[dayIdx] = current.filter(m=>m!==mt);
+    renderMenus();
   } else {
     const order = ['petitdej','dejeuner','gouter','diner'];
-    next = order.filter(m=>current.includes(m)||m===mt);
+    st.dayMoments[dayIdx] = order.filter(m=>current.includes(m)||m===mt);
+    if(!st.menu[dayIdx]) return;
+    if(!st.menu[dayIdx].meals[mt]) st.menu[dayIdx].meals[mt]={};
+    regenerateMoment(dayIdx, mt);
   }
-  st.dayMoments[dayIdx] = next;
+}
+
+
+function regenerateMoment(dayIdx, mt){
+  if(!st.menu[dayIdx]) return;
+  const pool = getPool();
+  const services = getDayServices(dayIdx);
+  const globalUsed = new Set(
+    st.menu.filter((_,i)=>i!==dayIdx)
+      .flatMap(day=>Object.values(day.meals).flatMap(meal=>Object.values(meal)))
+      .filter(Boolean).map(r=>r.id)
+  );
+  const allKnownCats = Object.values(COURSE_TYPE_MAP).flat();
+  const mtServices = SNACK_MOMENTS.has(mt)?['snack']:services;
+  if(!st.menu[dayIdx].meals[mt]) st.menu[dayIdx].meals[mt]={};
+  for(const svc of mtServices){
+    const catIds = COURSE_TYPE_MAP[svc]||[];
+    const p = pool.filter(r=>{
+      if(globalUsed.has(r.id)) return false;
+      const rc=r.cats||[];
+      if(!rc.length) return svc==='plat';
+      const hasCat=rc.some(c=>allKnownCats.includes(c)&&!EXCLUDED_CATS.includes(c));
+      return !hasCat||rc.some(c=>catIds.includes(c));
+    });
+    if(p.length){
+      const scored=shuffle(p).map(r=>({r,s:score(r)})).sort((a,b)=>b.s-a.s);
+      st.menu[dayIdx].meals[mt][svc]=scored[0].r;
+      globalUsed.add(scored[0].r.id);
+    }
+  }
   renderMenus();
-}
-
-function getDayServices(dayIdx){
-  if(isSoireeDay(dayIdx)) return ['apero','entree','plat','dessert'];
-  const custom = st.dayStructures[dayIdx];
-  if(custom) return custom;
-  return [...st.courseTypes]; // défaut global
-}
-
-function toggleDayService(dayIdx, svc){
-  const current = getDayServices(dayIdx);
-  const isSoiree = isSoireeDay(dayIdx);
-  if(isSoiree){
-    // Mode soirée : peut enlever apero ou dessert mais pas plat
-    if(svc === 'plat') return;
-    const idx = current.indexOf(svc);
-    const newServices = idx>=0 ? current.filter(s=>s!==svc) : [...current, svc];
-    // Garder l'ordre correct
-    const order = ['apero','entree','plat','dessert'];
-    st.dayStructures[dayIdx] = order.filter(s=>newServices.includes(s));
-  } else {
-    // Mode normal : peut enlever entrée ou dessert mais pas plat
-    if(svc === 'plat') return;
-    const idx = current.indexOf(svc);
-    const newServices = idx>=0 ? current.filter(s=>s!==svc) : [...current, svc];
-    const order = ['entree','plat','dessert'];
-    st.dayStructures[dayIdx] = order.filter(s=>newServices.includes(s));
-  }
-  // Regénérer ce jour seulement
-  regenerateDay(dayIdx);
+  if(st.courses) renderCourses();
 }
 
 function regenerateDay(dayIdx){
   if(!st.menu[dayIdx]) return;
   const pool = getPool();
-  const moments = ['petitdej','dejeuner','gouter','diner'].filter(m=>st.mealTypes.has(m));
+  const moments = getDayMoments(dayIdx); // moments spécifiques à ce jour
   const services = getDayServices(dayIdx);
   const globalUsed = new Set(
     st.menu.filter((_,i)=>i!==dayIdx)
@@ -1109,7 +1112,7 @@ function renderAgenda(g){
     // Boutons moments du jour
     const allMts=['petitdej','dejeuner','gouter','diner'];
     const activeMts=getDayMoments(di);
-    const mtLabels={petitdej:'🌅',dejeuner:'🌞',gouter:'🌤️',diner:'🌙'};
+    const mtLabels={petitdej:'P',dejeuner:'D',gouter:'G',diner:'S'};
     const momentBtns=allMts.filter(m=>st.mealTypes.has(m)).map(m=>{
       const on=activeMts.includes(m);
       return `<button class="day-moment-btn${on?' on':''}"
@@ -1152,9 +1155,9 @@ function catOf(i){const l=i.toLowerCase();for(const[c,ks]of Object.entries(CAT_K
 function cleanIng(i){return i.replace(/^[\d\s.,/]+\s*(g|kg|ml|cl|l|càs|càc|boîte|bouquet|gousse|branche|filet|sachet|tasse|cup)?\s*/i,'').trim();}
 function renderCourses(){if(!st.menu.length)return;const bycat={};const allRecipes=st.menu.flatMap(day=>Object.values(day.meals).flatMap(meal=>Object.values(meal))).filter(Boolean);allRecipes.forEach(r=>{r.ings.forEach(ing=>{const c=catOf(ing),cl=cleanIng(ing);if(!cl||st.stock.some(s=>cl.toLowerCase().includes(s)))return;if(!bycat[c])bycat[c]=new Set();bycat[c].add(cl);});});let html=st.stock.length?`<div style="font-size:.69rem;color:var(--muted);background:#fdf6ee;border:1px solid var(--warm);border-radius:4px;padding:4px 8px;margin-bottom:8px">🧺 Exclus : <strong>${st.stock.join(', ')}</strong></div>`:'';for(const[c,items]of Object.entries(bycat)){if(!items.size)continue;html+=`<div class="ccat">${c}</div><div class="ccols">`;[...items].forEach((item,j)=>{const id=`ci_${c.replace(/\W/g,'')}_${j}`;html+=`<div class="citem" id="w_${id}"><input type="checkbox" id="${id}" onchange="document.getElementById('w_${id}').classList.toggle('done',this.checked)"><label for="${id}">${item}</label></div>`;});html+='</div>';}document.getElementById('coursesList').innerHTML=html;}
 
-function toggleMealType(mt){if(st.mealTypes.has(mt)){if(st.mealTypes.size<=1)return;st.mealTypes.delete(mt);}else{st.mealTypes.add(mt);}document.querySelectorAll('[data-mt]').forEach(el=>{el.classList.toggle('active',st.mealTypes.has(el.getAttribute('data-mt')));});updateCourseTypeVisibility();if(st.menu.length)renderMenus();}
+function toggleMealType(mt){if(st.mealTypes.has(mt)){if(st.mealTypes.size<=1)return;st.mealTypes.delete(mt);}else{st.mealTypes.add(mt);}document.querySelectorAll('[data-mt]').forEach(el=>{el.classList.toggle('active',st.mealTypes.has(el.getAttribute('data-mt')));});updateCourseTypeVisibility();if(st.menu.length)renderMenus();saveCfg();}
 function updateCourseTypeVisibility(){const allSnack=[...st.mealTypes].every(m=>SNACK_MOMENTS.has(m));const ctGroup2=document.getElementById('courseTypeGroup2');const ctSep=document.getElementById('courseTypeSep');const ctLbl=document.getElementById('courseTypeLabel');[ctGroup2,ctSep,ctLbl].forEach(el=>{if(el){el.style.opacity=allSnack?'0.3':'1';el.style.pointerEvents=allSnack?'none':'auto';}});st._snackMode=allSnack;}
-function toggleCourseType(ct){if(st.courseTypes.has(ct)){if(st.courseTypes.size<=1)return;st.courseTypes.delete(ct);}else{st.courseTypes.add(ct);}document.querySelectorAll('[data-ct]').forEach(el=>{el.classList.toggle('active',st.courseTypes.has(el.getAttribute('data-ct')));});applyDietFilters();}
+function toggleCourseType(ct){if(st.courseTypes.has(ct)){if(st.courseTypes.size<=1)return;st.courseTypes.delete(ct);}else{st.courseTypes.add(ct);}document.querySelectorAll('[data-ct]').forEach(el=>{el.classList.toggle('active',st.courseTypes.has(el.getAttribute('data-ct')));});applyDietFilters();saveCfg();}
 function toggleSection(titleEl){titleEl.classList.toggle('collapsed');const body=titleEl.nextElementSibling;if(body&&body.classList.contains('section-body'))body.classList.toggle('collapsed');}
 function setView(mode){st.viewMode=mode;const btnA=document.getElementById('btnViewA');const btnB=document.getElementById('btnViewB');if(btnA){btnA.classList.toggle('active',mode==='agenda');btnA.style.background=mode==='agenda'?'#4a6e50':'rgba(255,255,255,.12)';}if(btnB){btnB.classList.toggle('active',mode==='columns');btnB.style.background=mode==='columns'?'#4a6e50':'rgba(255,255,255,.12)';}if(st.menu.length)renderMenus();}
 function buildCatList(){}
