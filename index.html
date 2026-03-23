@@ -277,8 +277,8 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .gl-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:.85rem;}
 
 /* ── PREVIEW RECETTE ── */
-.gl-preview{position:absolute;inset:0;background:var(--white);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease;z-index:2;}
-.gl-preview.open{transform:translateX(0);}
+.gl-preview{display:none;flex-direction:column;flex:1;overflow:hidden;}
+.gl-preview.open{display:flex;}
 .gl-preview-head{background:var(--sage-dark);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;}
 .gl-preview-back{background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0 4px;opacity:.8;}
 .gl-preview-back:hover{opacity:1;}
@@ -298,7 +298,29 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .gl-preview-pin.active{background:var(--sage-dark);color:#fff;border-color:var(--sage-dark);}
 .gl-preview-link{padding:10px 14px;border-radius:8px;font-size:.82rem;font-weight:500;cursor:pointer;border:1.5px solid var(--warm);background:var(--white);color:var(--muted);font-family:inherit;text-decoration:none;display:flex;align-items:center;gap:5px;}
 .gl-preview-link:hover{border-color:var(--sage-light);color:var(--sage-dark);}
-@media(max-width:600px){.gl-modal{max-height:95vh;border-radius:10px 10px 0 0;}.gl-overlay{align-items:flex-end;padding:0;}. gl-card-img,.gl-card-img-ph{width:36px;height:36px;}}
+@media(max-width:640px){
+  /* Modal plein écran en bas sur mobile */
+  .gl-overlay{align-items:flex-end;padding:0;}
+  .gl-modal{max-width:100%;max-height:92vh;border-radius:14px 14px 0 0;}
+  /* Toolbar en colonne */
+  .gl-toolbar{flex-direction:column;gap:6px;padding:10px 12px;}
+  .gl-search{min-width:0;width:100%;}
+  .gl-filter{width:100%;}
+  .gl-stats{justify-content:center;}
+  /* Cartes compactes */
+  .gl-card{padding:8px 10px;gap:8px;}
+  .gl-card-img,.gl-card-img-ph{width:38px;height:38px;flex-shrink:0;}
+  .gl-card-title{font-size:.82rem;}
+  .gl-pin-btn{padding:4px 8px;font-size:.7rem;}
+  /* Preview plein écran */
+  .gl-preview{border-radius:0;}
+  .gl-preview-img{height:130px;}
+  .gl-preview-footer{flex-direction:column;}
+  .gl-preview-pin,.gl-preview-link{width:100%;justify-content:center;text-align:center;}
+  /* Chips épinglées */
+  .gl-pinned-bar{padding:6px 10px;}
+  .gl-pin-chip{font-size:.68rem;}
+}
 
 /* ── STRUCTURE PAR JOUR ── */
 .day-struct{display:flex;gap:3px;margin-top:5px;flex-wrap:wrap;}
@@ -1227,11 +1249,21 @@ function openPreview(recipeId){
   }
   document.getElementById('glPreviewFooter').innerHTML = footer;
 
+  // Basculer : cacher liste, montrer preview
+  document.getElementById('glList').style.display='none';
+  document.getElementById('glToolbar').style.display='none';
+  const pinnedBar = document.getElementById('glPinnedBar');
+  if(pinnedBar) pinnedBar.style.display='none';
   document.getElementById('glPreview').classList.add('open');
 }
 
 function closePreview(){
   document.getElementById('glPreview').classList.remove('open');
+  // Réafficher la liste
+  document.getElementById('glList').style.display='';
+  document.getElementById('glToolbar').style.display='';
+  const pinnedBar = document.getElementById('glPinnedBar');
+  if(pinnedBar && st.pinnedRecipes.length) pinnedBar.style.display='flex';
   _currentPreviewId = null;
 }
 
@@ -1559,7 +1591,7 @@ function toggleSource(key){if(!st.activeSources)st.activeSources=[];const idx=st
       <h2>📖 Grand Livre des Recettes</h2>
       <button class="gl-close" onclick="closeBook()">×</button>
     </div>
-    <div class="gl-toolbar">
+    <div class="gl-toolbar" id="glToolbar">
       <input class="gl-search" id="glSearch" type="search" placeholder="Rechercher par nom, ingrédient…" oninput="renderBook()">
       <select class="gl-filter" id="glFilter" onchange="renderBook()">
         <option value="all">Tous les types</option>
