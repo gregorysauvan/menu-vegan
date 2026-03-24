@@ -8,6 +8,16 @@
 [build.environment]
   NODE_VERSION = "18"
 
+[[redirects]]
+  from = "/index.html/id:*"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/id:*"
+  to = "/index.html"
+  status = 200
+
 # Double protection : mot de passe HTTP sur /admin.html
 # (en plus du mot de passe JS dans la page)
 [[headers]]

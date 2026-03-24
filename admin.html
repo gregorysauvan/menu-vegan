@@ -193,17 +193,9 @@ async function pGet(url, timeout=20000){
   return r;
 }
 
-// APIs JSON (wp-json, RSS) : fetch direct depuis navigateur — pas de CORS sur GET JSON
+// APIs JSON / XML : passer aussi par le proxy pour éviter les blocages CORS
 async function pGetApi(url, timeout=15000){
-  try {
-    return await fetch(url, {
-      signal: AbortSignal.timeout(timeout),
-      headers: {'Accept': 'application/json, application/xml, */*'}
-    });
-  } catch(e) {
-    // Fallback proxy si CORS bloque quand même
-    return pGet(url, timeout);
-  }
+  return pGet(url, timeout);
 }
 
 // ── MAPPING CATÉGORIES WORDPRESS → CATS INTERNES ─────────────────
@@ -301,6 +293,142 @@ function guessCats(title, ings, jsonldCat, jsonldKw){
   return [8603];
 }
 
+function classifyExternalRecipe(title, ings, cats, jsonldCat='', jsonldKw=''){
+  const t = (title||'').toLowerCase();
+  const i = (Array.isArray(ings)?ings:[]).join(' ').toLowerCase();
+  const meta = `${t} ${(jsonldCat||'').toLowerCase()} ${(jsonldKw||'').toLowerCase()}`;
+
+  const negative = [
+    ['excluded_drink', /jus\b|smoothie|latte|boisson|infusion|kombucha|milkshake|lassi|limonade|cocktail|sirop|th[ée]\b|caf[ée]\b/],
+    ['excluded_base', /p[âa]te\s+[àa]\s+tarte|pate a tarte|vinaigrette|marinade|bouillon cube|condiment|cr[èe]me anglaise|ganache|gla[cç]age/],
+    ['excluded_non_meal', /menu\b|batch cooking|meal prep|liste de courses|course[s]?\b|astuce|conseil|technique|cuisson|comment\b/],
+  ];
+  for(const [reason, re] of negative){
+    if(re.test(meta)) return { menuType:'excluded', menuMoment:'none', isMenuCompatible:false, classificationReason:reason, classificationVersion:1 };
+  }
+
+  const hasCats = Array.isArray(cats) && cats.length>0;
+  const has = ids => hasCats && cats.some(c=>ids.includes(c));
+  if(has([28,27,29])) return { menuType:'side', menuMoment:'repas', isMenuCompatible:true, classificationReason:'cat_side', classificationVersion:1 };
+  if(has([8608])) return { menuType:'snack', menuMoment:'snack', isMenuCompatible:true, classificationReason:'cat_snack', classificationVersion:1 };
+  if(has([8604,8606])) return { menuType:'dessert', menuMoment:'dessert', isMenuCompatible:true, classificationReason:'cat_dessert', classificationVersion:1 };
+  if(has([8602,15947,8610,31409])) return { menuType:'entree', menuMoment:'repas', isMenuCompatible:true, classificationReason:'cat_entree', classificationVersion:1 };
+  if(has([8603,16929,15982,35459,35460])) return { menuType:'plat', menuMoment:'repas', isMenuCompatible:true, classificationReason:'cat_plat', classificationVersion:1 };
+
+  if(/petit.?d[eé]j|go[uû]ter|brunch|porridge|granola|muesli|pancake|gaufre|smoothie bowl|overnight|chia pudding/.test(meta))
+    return { menuType:'snack', menuMoment:'snack', isMenuCompatible:true, classificationReason:'kw_snack', classificationVersion:1 };
+  if(/dessert|gateau|g[âa]teau|cake|brownie|cookie|biscuit|muffin|fondant|clafoutis|compote|tarte au |sorbet|glace/.test(meta))
+    return { menuType:'dessert', menuMoment:'dessert', isMenuCompatible:true, classificationReason:'kw_dessert', classificationVersion:1 };
+  if(/ap[eé]ro|aperitif|ap[ée]ritif|verrine|toast|tartinade|houmous|caviar d[' ]aubergine/.test(meta))
+    return { menuType:'apero', menuMoment:'repas', isMenuCompatible:true, classificationReason:'kw_apero', classificationVersion:1 };
+  if(/\bsalade\b/.test(t) && !/salade de fruits/.test(t))
+    return { menuType:'entree', menuMoment:'repas', isMenuCompatible:true, classificationReason:'kw_salad', classificationVersion:1 };
+  if(/quiche|pizza|burger|wrap|taco|curry|risotto|gratin|lasagne|wok|tajine|soupe|velout|pates|p[âa]tes|gnocchi|parmentier|poelee|po[êe]l[ée]e|steak|galette sal/.test(meta))
+    return { menuType:'plat', menuMoment:'repas', isMenuCompatible:true, classificationReason:'kw_main', classificationVersion:1 };
+
+  const sweetMarkers = /sucre|chocolat|cacao|miel|sirop d.?[ée]rable|vanille|compote|confiture/.test(i);
+  const bakeMarkers = /farine|levure|ma[iï]zena|poudre d.?amande|beurre|oeuf|œuf/.test(i);
+  if(sweetMarkers && bakeMarkers)
+    return { menuType:'dessert', menuMoment:'dessert', isMenuCompatible:true, classificationReason:'ing_sweet', classificationVersion:1 };
+
+  const mainMarkers = /tofu|tempeh|seitan|lentille|pois chiche|haricot|riz|quinoa|semoule|pomme de terre|patate|p[âa]tes/.test(i);
+  if(mainMarkers)
+    return { menuType:'plat', menuMoment:'repas', isMenuCompatible:true, classificationReason:'ing_main', classificationVersion:1 };
+
+  return { menuType:'plat', menuMoment:'repas', isMenuCompatible:true, classificationReason:'default_main', classificationVersion:1 };
+}
+
+function normalizeRecipeUrl(rawUrl=''){
+  try{
+    const u = new URL(String(rawUrl||''));
+    u.hash = '';
+    const paramsToDrop = ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','fbclid','gclid','output','print'];
+    paramsToDrop.forEach(p=>u.searchParams.delete(p));
+    const path = u.pathname
+      .replace(/\/amp\/?$/i,'/')
+      .replace(/\/print\/?$/i,'/')
+      .replace(/\/page\/\d+\/?$/i,'/')
+      .replace(/\/+$/,'');
+    u.pathname = path || '/';
+    u.search = u.searchParams.toString() ? `?${u.searchParams.toString()}` : '';
+    return `${u.origin}${u.pathname}${u.search}`;
+  } catch(e){
+    return String(rawUrl||'').trim().replace(/\/+$/,'');
+  }
+}
+
+function normalizeRecipeTitle(title=''){
+  return String(title||'')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/&amp;/g,'et')
+    .replace(/['’`]/g,'')
+    .replace(/[^a-z0-9]+/g,' ')
+    .replace(/\b(vegan|veggie|vegetarien|végétarien|sans gluten|healthy|facile|rapide|maison)\b/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function recipeRichnessScore(recipe){
+  return (recipe.photo ? 4 : 0)
+    + Math.min((recipe.ings||[]).length, 12)
+    + Math.min((recipe.steps||[]).length, 8)
+    + Math.min((recipe.cats||[]).length, 4)
+    + (recipe.time ? 1 : 0)
+    + (recipe.classificationVersion ? 1 : 0);
+}
+
+function dedupeRecipesForSource(recipes){
+  const byUrl = new Map();
+  const byTitle = new Map();
+  let removed = 0;
+
+  function keepBetter(map, key, recipe){
+    const current = map.get(key);
+    if(!current){
+      map.set(key, recipe);
+      return;
+    }
+    const best = recipeRichnessScore(recipe) > recipeRichnessScore(current) ? recipe : current;
+    if(best !== current) map.set(key, best);
+    removed++;
+  }
+
+  for(const recipe of recipes){
+    if(!recipe || !recipe.title) continue;
+    const urlKey = normalizeRecipeUrl(recipe.id || recipe.url || '');
+    const titleKey = normalizeRecipeTitle(recipe.title);
+
+    if(urlKey){
+      recipe.id = urlKey;
+      recipe.url = urlKey;
+      keepBetter(byUrl, urlKey, recipe);
+      continue;
+    }
+    if(titleKey){
+      keepBetter(byTitle, titleKey, recipe);
+      continue;
+    }
+  }
+
+  const merged = [...byUrl.values()];
+  for(const recipe of byTitle.values()){
+    const titleKey = normalizeRecipeTitle(recipe.title);
+    const existingIdx = merged.findIndex(r=>normalizeRecipeTitle(r.title)===titleKey);
+    if(existingIdx===-1){
+      merged.push(recipe);
+      continue;
+    }
+    if(recipeRichnessScore(recipe) > recipeRichnessScore(merged[existingIdx])){
+      merged[existingIdx] = recipe;
+    }
+    removed++;
+  }
+
+  return { recipes: merged, removed };
+}
+
 function extractRecipeFromHtml(html, pageUrl, srcKey, wpCats=[], catMap={}){
   const blocks = [...html.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
   for(const block of blocks){
@@ -340,9 +468,10 @@ function extractRecipeFromHtml(html, pageUrl, srcKey, wpCats=[], catMap={}){
         // 2. Fallback : JSON-LD + analyse titre/ingrédients
         if(!cats) cats = guessCats(title, ings, jsonldCat, jsonldKw);
 
+        const classification = classifyExternalRecipe(title, ings, cats, jsonldCat, jsonldKw);
         return {id:pageUrl, src:srcKey, title,
           photo: photo?String(photo).slice(0,300):null,
-          time, ings:ings.slice(0,12), steps:steps.slice(0,6), cats};
+          time, ings:ings.slice(0,12), steps:steps.slice(0,6), cats, ...classification};
       }
     } catch(e){}
   }
@@ -388,9 +517,10 @@ function extractRecipeFromHtml(html, pageUrl, srcKey, wpCats=[], catMap={}){
         if(wpMapped.length) cats.splice(0, cats.length, ...new Set(wpMapped));
       }
 
+      const classification = classifyExternalRecipe(title, ings, cats, '', '');
       return {id:pageUrl, src:srcKey, title,
         photo: photo ? photo.slice(0,300) : null,
-        time, ings, steps, cats: guessCats(title, ings, '', '')};
+        time, ings, steps, cats, ...classification};
     } catch(e) {}
   }
 
@@ -530,8 +660,11 @@ async function rebuildOne(key){
     else if(src.type==='blogger')   recipes = await scrapeBlogger(key, src);
     else if(src.type==='sitemap')   recipes = await scrapeSitemap(key, src);
 
+    const rawCount = recipes.length;
+    const deduped = dedupeRecipesForSource(recipes);
+    recipes = deduped.recipes;
 
-    log(`  → ${recipes.length} recettes scrapées, envoi au serveur…`);
+    log(`  → ${rawCount} recettes scrapées${deduped.removed?` · ${deduped.removed} doublon${deduped.removed>1?'s':''} supprimé${deduped.removed>1?'s':''}`:''}, envoi au serveur…`);
     const res = await saveToBlobs(key, recipes);
     log(`  ✅ ${src.name} : ${res.count} recettes sauvegardées.`);
     setCardStatus(key, 'ok', `✅ ${res.count.toLocaleString('fr')} recettes · aujourd'hui`);

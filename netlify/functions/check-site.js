@@ -1,6 +1,5 @@
 import { getStore } from '@netlify/blobs';
 
-// Nouveau nom de store → l'ancien cache est ignoré sans avoir à le vider
 const STORE_NAME = 'pages-cache-v2';
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -41,7 +40,7 @@ export default async (req, context) => {
     });
 
     const body = await res.text();
-    const ct      = res.headers.get('content-type') || 'text/html';
+    const ct = res.headers.get('content-type') || 'text/html';
     const wpTotal = res.headers.get('X-WP-Total') || '';
     const wpPages = res.headers.get('X-WP-TotalPages') || '';
 
@@ -59,4 +58,3 @@ export default async (req, context) => {
     return new Response(JSON.stringify({ error: String(e) }), { status: 502 });
   }
 };
-

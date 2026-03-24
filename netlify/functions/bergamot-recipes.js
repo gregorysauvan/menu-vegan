@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { getStore } from '@netlify/blobs';
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -6,16 +7,18 @@ export default async (req, context) => {
   const token = req.headers.get('authorization') || req.headers.get('Authorization');
   if (!token) return new Response('Token manquant', { status: 401 });
 
-  // Nouveau store — évite les conflits avec l'ancien recipes-cache supprimé
   const store = getStore('bergamot-cache');
+  const tokenKey = createHash('sha256').update(token).digest('hex').slice(0, 24);
+  const metaKey = `meta-${tokenKey}`;
+  const recipesKey = `recipes-${tokenKey}`;
   const url = new URL(req.url);
   const force = url.searchParams.get('force') === '1';
 
   if (!force) {
     try {
-      const meta = await store.get('meta', { type: 'json' });
+      const meta = await store.get(metaKey, { type: 'json' });
       if (meta && Date.now() - meta.ts < TTL_MS) {
-        const cached = await store.get('recipes', { type: 'json' });
+        const cached = await store.get(recipesKey, { type: 'json' });
         if (cached && cached.length > 0) {
           return new Response(JSON.stringify(cached), {
             headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
@@ -35,7 +38,7 @@ export default async (req, context) => {
     const all = await res.json();
     const out = [];
     for (const r of all) {
-      const ings  = (r.ingredients  || [])[0]?.data || [];
+      const ings = (r.ingredients || [])[0]?.data || [];
       const steps = (r.instructions || [])[0]?.data || [];
       if (ings.length < 2 || steps.length < 1) continue;
       const photos = r.photos || [];
@@ -48,8 +51,8 @@ export default async (req, context) => {
     }
 
     try {
-      await store.setJSON('recipes', out);
-      await store.setJSON('meta', { ts: Date.now(), count: out.length });
+      await store.setJSON(recipesKey, out);
+      await store.setJSON(metaKey, { ts: Date.now(), count: out.length });
     } catch (e) {}
 
     return new Response(JSON.stringify(out), {
@@ -59,4 +62,3 @@ export default async (req, context) => {
     return new Response(String(e), { status: 500 });
   }
 };
-

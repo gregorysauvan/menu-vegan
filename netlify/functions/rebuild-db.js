@@ -3,14 +3,15 @@ import { getStore } from '@netlify/blobs';
 const SOURCES = {
   'lafeestephanie':     { name: 'La fée Stéphanie',      url: 'https://www.lafeestephanie.com',    type: 'wordpress', specialty: 'vegan',   icon: '🧚' },
   'rosecitron':         { name: 'Rose Citron',            url: 'https://rosecitron.fr',             type: 'wordpress', specialty: 'vegan',   icon: '🍋' },
-  'deliacious':         { name: 'Deliacious',             url: 'https://deliacious.com',            type: 'blogger',   specialty: 'vegan',   icon: '🌱' },
+  'deliacious': {
+    name: 'Deliacious', url: 'https://deliacious.com', type: 'sitemap', specialty: 'vegan', icon: '🌱', maxRecipes: 2500,
+    sitemaps: ['https://deliacious.com/post-sitemap1.xml'],
+  },
   'freethepickle':      { name: 'Free The Pickle',        url: 'https://freethepickle.fr',          type: 'wordpress', specialty: 'vegan',   icon: '🥒' },
   'healthylalou':       { name: 'Healthy Lalou',          url: 'https://healthylalou.fr',           type: 'wordpress', specialty: 'healthy', icon: '💚' },
   'saveursbio':         { name: 'Saveurs Bio',            url: 'https://www.saveurs-bio.fr',        type: 'wordpress', specialty: 'bio',     icon: '🌿' },
   'barbarafrenchvegan': { name: 'Barbara French Vegan',   url: 'https://barbarafrenchvegan.com',    type: 'wordpress', specialty: 'vegan',   icon: '🌸' },
   'iletaituneveggie':   { name: 'Il était une veggie',    url: 'https://iletaituneveggie.com',      type: 'wordpress', specialty: 'vegan',   icon: '🥦' },
-  // papillesetpupilles : bloque API WP et sitemaps → désactivé
-  // 'papillesetpupilles': { name: 'Papilles et Pupilles', ... },
   'ptitchef': {
     name: 'Ptitchef', url: 'https://www.ptitchef.com', type: 'sitemap', specialty: 'general', icon: '👨‍🍳', maxRecipes: 3000,
     sitemaps: ['https://www.ptitchef.com/upload_data/sitemaps/recipe-fr-1.xml'],
@@ -22,10 +23,9 @@ const SOURCES = {
 
 export default async (req) => {
   const store = getStore('recettes-v2');
-  const url   = new URL(req.url);
+  const url = new URL(req.url);
   const action = url.searchParams.get('action') || 'list';
 
-  // ── GET ?action=list ──────────────────────────────────────────
   if (action === 'list') {
     const result = {};
     for (const [key, src] of Object.entries(SOURCES)) {
@@ -39,7 +39,6 @@ export default async (req) => {
     return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  // ── GET ?action=get&source=KEY ────────────────────────────────
   if (action === 'get') {
     const sourceKey = url.searchParams.get('source');
     if (!sourceKey) return new Response('source requis', { status: 400 });
@@ -54,8 +53,6 @@ export default async (req) => {
     }
   }
 
-  // ── POST ?action=save&source=KEY ──────────────────────────────
-  // Reçoit { recipes: [...] } depuis admin.html et stocke dans les Blobs
   if (action === 'save' && req.method === 'POST') {
     const sourceKey = url.searchParams.get('source');
     if (!sourceKey || !SOURCES[sourceKey]) {
@@ -82,4 +79,3 @@ export default async (req) => {
 
   return new Response('action inconnue', { status: 400 });
 };
-
