@@ -34,6 +34,25 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .main{max-width:900px;margin:0 auto;padding:22px 18px;}
 .info-box{background:var(--white);border:1px solid var(--warm);border-radius:10px;padding:14px 16px;margin-bottom:18px;font-size:.8rem;color:var(--muted);line-height:1.6;}
 .info-box strong{color:var(--ink);}
+.add-source-box{background:var(--white);border:1px solid var(--warm);border-radius:10px;padding:14px 16px;margin-bottom:18px;}
+.add-source-box h2{font-family:'Playfair Display',serif;font-size:.95rem;color:var(--earth);margin-bottom:10px;}
+.add-source-row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}
+.add-source-row .field{flex:1;min-width:220px;margin-bottom:0;}
+.add-source-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.add-source-result{margin-top:10px;font-size:.78rem;color:var(--muted);line-height:1.6;}
+.add-source-result.ok{color:#2e7d32;}
+.add-source-result.err{color:var(--red);}
+.search-source-box{background:var(--white);border:1px solid var(--warm);border-radius:10px;padding:14px 16px;margin-bottom:18px;}
+.search-source-box h2{font-family:'Playfair Display',serif;font-size:.95rem;color:var(--earth);margin-bottom:10px;}
+.search-results{margin-top:12px;display:grid;gap:10px;}
+.search-result-card{border:1px solid var(--warm);border-radius:10px;padding:12px;background:var(--cream);}
+.search-result-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px;}
+.search-result-title{font-weight:600;font-size:.88rem;color:var(--ink);}
+.search-result-url{font-size:.72rem;color:var(--muted);word-break:break-all;}
+.search-result-snippet{font-size:.76rem;color:var(--muted);line-height:1.45;margin-bottom:8px;}
+.search-result-meta{font-size:.7rem;color:var(--earth);margin-bottom:8px;}
+.search-empty{font-size:.78rem;color:var(--muted);}
+.search-result-added{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:#e8f5e9;color:#2e7d32;font-size:.74rem;font-weight:600;}
 
 /* SOURCE GRID */
 .sources-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:20px;}
@@ -47,9 +66,12 @@ header h1 span{color:var(--sage-light);font-style:italic;}
 .st-none{background:var(--warm);color:var(--earth);}
 .st-running{background:#fff8e1;color:#f57f17;}
 .st-error{background:#fdf2f2;color:var(--red);}
+.btn-row{display:flex;gap:8px;margin-top:8px;}
 .btn-rebuild{width:100%;padding:7px;background:var(--earth);color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.78rem;font-weight:500;cursor:pointer;transition:background .15s;}
 .btn-rebuild:hover{background:#8a6650;}
 .btn-rebuild:disabled{opacity:.45;cursor:default;}
+.btn-update{background:#4f7457 !important;color:#fff !important;border:1px solid #4f7457;}
+.btn-update:hover{background:#48684f !important;border-color:#48684f;}
 
 /* LOG */
 .log-wrap{background:var(--white);border:1px solid var(--warm);border-radius:10px;padding:14px 16px;margin-bottom:18px;}
@@ -101,6 +123,36 @@ header h1 span{color:var(--sage-light);font-style:italic;}
     <button class="btn-all" id="btnAll" onclick="rebuildAll()">🔄 Tout reconstruire</button>
   </div>
 
+  <div class="search-source-box">
+    <h2>🔎 Rechercher des sites de recettes</h2>
+    <div class="add-source-row">
+      <div class="field">
+        <label>Recherche</label>
+        <input type="search" id="sourceSearchQuery" placeholder="recettes vegan dessert" onkeydown="if(event.key==='Enter')searchSources()">
+      </div>
+      <div class="add-source-actions">
+        <button class="btn-all" id="btnSearchSource" onclick="searchSources()">Rechercher</button>
+      </div>
+    </div>
+    <div class="add-source-result" id="searchSourceResult">Entrez un thème puis cherchez des sites à tester.</div>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+
+  <div class="add-source-box">
+    <h2>➕ Ajouter une source</h2>
+    <div class="add-source-row">
+      <div class="field">
+        <label>URL du site</label>
+        <input type="url" id="newSourceUrl" placeholder="https://exemple.com">
+      </div>
+      <div class="add-source-actions">
+        <button class="btn-all" id="btnTestSource" onclick="testNewSource()">Tester</button>
+        <button class="btn-all" id="btnSaveSource" onclick="saveNewSource()" disabled>Ajouter au catalogue</button>
+      </div>
+    </div>
+    <div class="add-source-result" id="newSourceResult">Entrez une URL puis lancez un test automatique.</div>
+  </div>
+
   <div class="sources-grid" id="sourcesGrid">
     <div style="color:var(--muted);font-size:.8rem">Chargement du catalogue…</div>
   </div>
@@ -145,6 +197,11 @@ if(sessionStorage.getItem('adminOk')==='1'){
 // ── CATALOGUE ────────────────────────────────────────────────────
 let catalog = {};
 let busy = false;
+let pendingSourceConfig = null;
+let lastSearchResults = [];
+const LARGE_SOURCE_THRESHOLD = 5000;
+const LARGE_SOURCE_DEFAULT_LIMIT = 3000;
+const SCRAPE_CONCURRENCY = 2;
 
 async function initAdmin(){
   log('Chargement du catalogue…');
@@ -163,14 +220,19 @@ function renderGrid(){
     const ageTxt = age===null ? 'jamais indexé' : age===0 ? "aujourd'hui" : `il y a ${age}j`;
     const stCls = src.cached ? 'st-ok' : 'st-none';
     const stTxt = src.cached ? `✅ ${src.count.toLocaleString('fr')} recettes · ${ageTxt}` : '⚠️ Non indexé';
+    const volumeTxt = sourceEstimatedCount(src) ? ` · ${formatSourceEstimate(src)}` : '';
     return `<div class="src-card" id="card-${key}">
       <div class="src-card-head">
         <span class="src-icon">${src.icon||'🌐'}</span>
         <span class="src-name">${src.name}</span>
       </div>
       <div class="src-status ${stCls}" id="st-${key}">${stTxt}</div>
-      <div class="src-meta" id="meta-${key}">${src.url}</div>
-      <button class="btn-rebuild" id="btn-${key}" onclick="rebuildOne('${key}')">↻ Reconstruire</button>
+      <div class="src-meta" id="meta-${key}">${src.url}${volumeTxt}${src.maxRecipes?` · limite ${src.maxRecipes.toLocaleString('fr')}`:''}</div>
+      <div class="btn-row">
+        <button class="btn-rebuild" id="btn-reset-${key}" onclick="rebuildSource('${key}','replace')">↻ Reconstruire</button>
+        <button class="btn-rebuild btn-update" id="btn-update-${key}" onclick="rebuildSource('${key}','update')">MAJ</button>
+      </div>
+      ${src.custom ? `<button class="btn-rebuild" style="margin-top:8px;background:#8a6650" onclick="deleteSource('${key}')">Supprimer</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -187,15 +249,368 @@ function logClear(){ document.getElementById('logBox').textContent = ''; }
 // ── SCRAPING CÔTÉ CLIENT ─────────────────────────────────────────
 // Proxy CORS via la fonction check-site existante
 // Pages HTML : via proxy check-site (CORS bloque le fetch direct)
-async function pGet(url, timeout=20000){
-  const r = await fetch(`/.netlify/functions/check-site?url=${encodeURIComponent(url)}`,
+async function pGet(url, timeout=20000, force=false){
+  const qs = `url=${encodeURIComponent(url)}${force ? '&force=1' : ''}`;
+  const r = await fetch(`/.netlify/functions/check-site?${qs}`,
     {signal: AbortSignal.timeout(timeout)});
   return r;
 }
 
 // APIs JSON / XML : passer aussi par le proxy pour éviter les blocages CORS
-async function pGetApi(url, timeout=15000){
-  return pGet(url, timeout);
+async function pGetApi(url, timeout=15000, force=false){
+  return pGet(url, timeout, force);
+}
+
+function slugifySourceKey(input=''){
+  return String(input||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/[^a-z0-9]+/g,'').trim();
+}
+
+async function detectSitemaps(base){
+  try{
+    const robots=await pGet(`${base}/robots.txt`,12000);
+    if(robots.ok){
+      const text=await robots.text();
+      const fromRobots=[...text.matchAll(/^\s*Sitemap:\s*(https?:\/\/\S+)\s*$/gim)].map(m=>m[1]);
+      if(fromRobots.length){
+        return fromRobots.slice(0,8);
+      }
+    }
+  }catch(e){}
+  const candidates=[
+    `${base}/post-sitemap.xml`,
+    `${base}/post-sitemap1.xml`,
+    `${base}/recipe-sitemap.xml`,
+    `${base}/sitemap-recipes.xml`,
+    `${base}/xml/sitemap.xml`,
+    `${base}/sitemap.xml`,
+    `${base}/sitemap_index.xml`,
+  ];
+  for(const candidate of candidates){
+    try{
+      const r=await pGet(candidate,12000);
+      if(!r.ok) continue;
+      const text=await r.text();
+      if(!/<urlset|<sitemapindex/i.test(text)) continue;
+      const nested=[...text.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)].map(m=>m[1]);
+      const sitemapMatches=nested.filter(u=>/sitemap/i.test(u));
+      const pageMatches=nested.filter(u=>!/sitemap/i.test(u));
+      if(pageMatches.length) return [candidate];
+      const preferred=sitemapMatches.filter(u=>/post|recipe|recette/i.test(u));
+      if(preferred.length) return preferred.slice(0,8);
+      if(sitemapMatches.length) return sitemapMatches.slice(0,8);
+    }catch(e){}
+  }
+  return [];
+}
+
+async function estimateSitemapRecipeCount(sitemaps){
+  const seen = new Set();
+  let count = 0;
+  let truncated = false;
+
+  async function walk(url, depth=0){
+    if(!url || seen.has(url) || depth>2 || truncated) return;
+    seen.add(url);
+    try{
+      const r = await pGet(url, 15000);
+      if(!r.ok) return;
+      const text = await r.text();
+      const locs = [...text.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)].map(m=>m[1]);
+      if(/<sitemapindex/i.test(text)){
+        for(const nested of locs.slice(0,30)){
+          await walk(nested, depth+1);
+          if(truncated) break;
+        }
+        return;
+      }
+      count += locs.length;
+      if(count > 20000) truncated = true;
+    }catch(e){}
+  }
+
+  for(const sm of (sitemaps||[]).slice(0,8)){
+    await walk(sm, 0);
+    if(truncated) break;
+  }
+  return truncated ? count : count;
+}
+
+function sourceEstimatedCount(src){
+  return src?.estimatedCount || src?.count || src?.maxRecipes || 0;
+}
+
+function detectSpecialtyHints(text=''){
+  const raw = String(text||'').toLowerCase();
+  if(/\bvegan|v[ée]g[ée]tal|plant based|veggie\b/.test(raw)) return 'vegan';
+  if(/\bbio|organic\b/.test(raw)) return 'bio';
+  if(/\bhealthy|sain|ig bas|fit\b/.test(raw)) return 'healthy';
+  return 'general';
+}
+
+function getAutoSpecialty(config){
+  if(!config?.source) return 'general';
+  return detectSpecialtyHints(`${config.source.name} ${config.source.url} ${config.detail||''}`);
+}
+
+function applyPendingSourceSpecialty(){
+  if(!pendingSourceConfig?.source) return;
+  pendingSourceConfig.source.specialty = pendingSourceConfig.source.specialty || getAutoSpecialty(pendingSourceConfig);
+}
+
+function formatSourceEstimate(src){
+  const n = sourceEstimatedCount(src);
+  return n ? `~${n.toLocaleString('fr')} recettes estimées` : 'volume inconnu';
+}
+
+function askLargeSourceLimit(src, mode){
+  const estimate = sourceEstimatedCount(src);
+  if(!estimate || estimate <= LARGE_SOURCE_THRESHOLD) return src.maxRecipes;
+  const preset = src.maxRecipes || LARGE_SOURCE_DEFAULT_LIMIT;
+  const answer = prompt(
+    `${src.name} semble très volumineux (${formatSourceEstimate(src)}).\n`+
+    `Entrez une limite comme 1000, 3000 ou 5000.\n`+
+    `Entrez "tout" pour tout tenter.\n`+
+    `Laissez vide pour annuler ${mode==='update' ? 'la mise à jour' : 'la reconstruction'}.`,
+    String(preset)
+  );
+  if(answer===null || !String(answer).trim()) return null;
+  const raw = String(answer).trim().toLowerCase();
+  if(raw==='tout' || raw==='all') return undefined;
+  const limit = parseInt(raw, 10);
+  if(!Number.isFinite(limit) || limit<=0){
+    alert('Limite invalide.');
+    return null;
+  }
+  return limit;
+}
+
+async function suggestSourceConfig(rawUrl){
+  const base=String(rawUrl||'').trim().replace(/\/$/,'');
+  if(!base) throw new Error('URL manquante');
+  const urlObj=new URL(base);
+  const hostname=urlObj.hostname.replace(/^www\./,'');
+  const suggestedName=hostname.split('.').slice(0,-1).join('.') || hostname;
+
+  try{
+    let bestCandidate = null;
+    let postsCandidate = null;
+    const typesRes = await pGetApi(`${base}/wp-json/wp/v2/types`);
+    if(typesRes.ok){
+      const types = await typesRes.json();
+      const customRecipeTypes = Object.values(types||{}).filter(t => {
+        const slug = String(t?.slug || '').toLowerCase();
+        const name = String(t?.name || '').toLowerCase();
+        const restBase = String(t?.rest_base || '').toLowerCase();
+        const taxos = Array.isArray(t?.taxonomies) ? t.taxonomies.join(' ').toLowerCase() : '';
+        return restBase && restBase !== 'posts' && (
+          /recipe|recette/.test(slug) ||
+          /recipe|recette/.test(name) ||
+          /recipe|recette/.test(restBase) ||
+          /recipe|recette/.test(taxos)
+        );
+      });
+      for(const customRecipeType of customRecipeTypes){
+        const wpCustom=await pGetApi(`${base}/wp-json/wp/v2/${customRecipeType.rest_base}?per_page=3&_fields=link,title`);
+        if(!wpCustom.ok) continue;
+        const posts=await wpCustom.json();
+        const total=parseInt(wpCustom.headers.get('X-WP-Total')||'0');
+        if(Array.isArray(posts) && posts.length){
+          const candidate = {
+            key: slugifySourceKey(hostname),
+            source: { name:suggestedName, url:base, type:'wordpress', wpRestBase: customRecipeType.rest_base, specialty:'general', icon:'🌐', estimatedCount: total||posts.length, maxRecipes:(total||0)>LARGE_SOURCE_THRESHOLD?LARGE_SOURCE_DEFAULT_LIMIT:undefined },
+            detail: `WordPress recettes détecté · endpoint ${customRecipeType.rest_base} · ${total?`~${total.toLocaleString('fr')} recettes`:''}`,
+            total: total || posts.length,
+          };
+          if(!bestCandidate || candidate.total > bestCandidate.total) bestCandidate = candidate;
+        }
+      }
+      const wp=await pGetApi(`${base}/wp-json/wp/v2/posts?per_page=3&_fields=link,title`);
+      if(wp.ok){
+        const total=parseInt(wp.headers.get('X-WP-Total')||'0');
+        const posts=await wp.json();
+        if(Array.isArray(posts) && posts.length){
+          postsCandidate = {
+          key: slugifySourceKey(hostname),
+          source: { name:suggestedName, url:base, type:'wordpress', specialty:'general', icon:'🌐', estimatedCount: total||posts.length, maxRecipes:(total||0)>LARGE_SOURCE_THRESHOLD?LARGE_SOURCE_DEFAULT_LIMIT:undefined },
+          detail: `WordPress détecté · ${total?`~${total.toLocaleString('fr')} recettes`:posts.length+' posts testés'}`,
+          total: total || posts.length,
+          };
+        }
+      }
+      if(postsCandidate && (!bestCandidate || postsCandidate.total > bestCandidate.total)){
+        return postsCandidate;
+      }
+      if(bestCandidate){
+        return bestCandidate;
+      }
+    }
+  }catch(e){}
+
+  try{
+    const feed=await pGetApi(`${base}/feeds/posts/default?alt=rss&max-results=5`);
+    if(feed.ok){
+      const text=await feed.text();
+      if(/<rss|<feed/i.test(text)){
+        return {
+          key: slugifySourceKey(hostname),
+          source: { name:suggestedName, url:base, type:'blogger', specialty:'general', icon:'🌐' },
+          detail: 'Flux Blogger détecté',
+        };
+      }
+    }
+  }catch(e){}
+
+  const sitemaps=await detectSitemaps(base);
+  if(sitemaps.length){
+    const estimatedCount = await estimateSitemapRecipeCount(sitemaps);
+    return {
+      key: slugifySourceKey(hostname),
+      source: { name:suggestedName, url:base, type:'sitemap', specialty:'general', icon:'🌐', sitemaps, estimatedCount, maxRecipes:estimatedCount>LARGE_SOURCE_THRESHOLD?LARGE_SOURCE_DEFAULT_LIMIT:undefined },
+      detail: `Sitemap détecté · ${sitemaps.length} sitemap(s) retenu(s)${estimatedCount?` · ~${estimatedCount.toLocaleString('fr')} recettes`:''}`,
+    };
+  }
+
+  throw new Error('Aucune stratégie compatible détectée automatiquement');
+}
+
+function renderSearchResults(items){
+  const el = document.getElementById('searchResults');
+  if(!items?.length){
+    el.innerHTML = '<div class="search-empty">Aucun site pertinent trouvé pour cette recherche.</div>';
+    return;
+  }
+  el.innerHTML = items.map((item, idx)=>`
+    <div class="search-result-card">
+      <div class="search-result-head">
+        <div>
+          <div class="search-result-title">${item.title}</div>
+          <div class="search-result-url">${item.url}</div>
+        </div>
+        ${item.alreadyAdded
+          ? `<span class="search-result-added">✅ Déjà ajouté</span>`
+          : `<button class="btn-all" style="padding:8px 12px" onclick="useSearchResult(${idx})">Tester ce site</button>`}
+      </div>
+      <div class="search-result-snippet">${item.snippet||''}</div>
+      <div class="search-result-meta">Score recette : ${item.score}/10 · spécialité détectée : ${item.specialty}${item.alreadyAdded?` · source déjà présente`:''}</div>
+    </div>
+  `).join('');
+}
+
+async function searchSources(){
+  const query = document.getElementById('sourceSearchQuery')?.value?.trim() || '';
+  const result = document.getElementById('searchSourceResult');
+  const list = document.getElementById('searchResults');
+  const btn = document.getElementById('btnSearchSource');
+  lastSearchResults = [];
+  list.innerHTML = '';
+  if(!query){
+    result.className='add-source-result err';
+    result.textContent='Entrez une recherche.';
+    return;
+  }
+  btn.disabled = true;
+  result.className='add-source-result';
+  result.textContent='Recherche de sites en cours…';
+  try{
+    const r = await fetch(`/.netlify/functions/search-sources?q=${encodeURIComponent(query)}`, {cache:'no-store'});
+    const data = await r.json();
+    if(!r.ok || !data.ok) throw new Error(data.error || `Erreur ${r.status}`);
+    lastSearchResults = (Array.isArray(data.results) ? data.results : []).map(item=>{
+      const itemKey = slugifySourceKey(item.url || item.title || '');
+      const alreadyAdded = !!catalog[itemKey] || Object.values(catalog).some(src => String(src?.url||'').replace(/\/$/,'') === String(item.url||'').replace(/\/$/,''));
+      return {...item, alreadyAdded};
+    });
+    renderSearchResults(lastSearchResults);
+    result.className = 'add-source-result ok';
+    result.textContent = `${lastSearchResults.length} site(s) trouvés.`;
+  }catch(e){
+    result.className = 'add-source-result err';
+    result.textContent = `Recherche impossible : ${e.message}`;
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function useSearchResult(idx){
+  const item = lastSearchResults[idx];
+  if(!item) return;
+  const input = document.getElementById('newSourceUrl');
+  input.value = item.url;
+  testNewSource();
+}
+
+async function testNewSource(){
+  const input=document.getElementById('newSourceUrl');
+  const result=document.getElementById('newSourceResult');
+  const btn=document.getElementById('btnTestSource');
+  const saveBtn=document.getElementById('btnSaveSource');
+  const raw=input?.value?.trim()||'';
+  pendingSourceConfig=null;
+  saveBtn.disabled=true;
+  if(!raw){result.className='add-source-result err';result.textContent='Entrez une URL valide.';return;}
+  btn.disabled=true;
+  result.className='add-source-result';
+  result.textContent='Test de la source en cours…';
+  try{
+    const config=await suggestSourceConfig(raw);
+    if(catalog[config.key]){
+      throw new Error(`Une source avec la clé ${config.key} existe déjà`);
+    }
+    config.source.specialty = getAutoSpecialty(config);
+    pendingSourceConfig=config;
+    result.className='add-source-result ok';
+    result.innerHTML=`<strong>${config.source.name}</strong><br>Type détecté : <strong>${config.source.type}</strong><br>Spécialité : <strong>${config.source.specialty}</strong><br>${config.detail}${config.source.maxRecipes?`<br>Limite initiale proposée : <strong>${config.source.maxRecipes.toLocaleString('fr')}</strong>`:''}`;
+    saveBtn.disabled=false;
+  }catch(e){
+    result.className='add-source-result err';
+    result.textContent=`Impossible de configurer cette source : ${e.message}`;
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+async function saveNewSource(){
+  if(!pendingSourceConfig) return;
+  applyPendingSourceSpecialty();
+  const result=document.getElementById('newSourceResult');
+  const saveBtn=document.getElementById('btnSaveSource');
+  saveBtn.disabled=true;
+  result.className='add-source-result';
+  result.textContent='Enregistrement de la source…';
+  try{
+    const r=await fetch('/.netlify/functions/rebuild-db?action=catalog-save',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(pendingSourceConfig),
+    });
+    const data=await r.json();
+    if(!r.ok || !data.ok) throw new Error(data.error||`Erreur ${r.status}`);
+    catalog[pendingSourceConfig.key]={...pendingSourceConfig.source,cached:false,count:0,updatedAt:null,custom:true};
+    renderGrid();
+    result.className='add-source-result ok';
+    result.textContent='Source ajoutée au catalogue. Vous pouvez maintenant la reconstruire.';
+    log(`➕ Source ajoutée : ${pendingSourceConfig.source.name} (${pendingSourceConfig.source.type}, ${pendingSourceConfig.source.specialty})`);
+    pendingSourceConfig=null;
+    document.getElementById('newSourceUrl').value='';
+  }catch(e){
+    result.className='add-source-result err';
+    result.textContent=`Impossible d'ajouter la source : ${e.message}`;
+  }
+}
+
+async function deleteSource(key){
+  if(!catalog[key]?.custom) return;
+  if(!confirm(`Supprimer la source ${catalog[key].name} du catalogue et nettoyer ses recettes stockées ?`)) return;
+  const r=await fetch('/.netlify/functions/rebuild-db?action=catalog-delete',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({key, purge:true}),
+  });
+  const data=await r.json();
+  if(!r.ok || !data.ok){log(`❌ Suppression impossible : ${data.error||r.status}`);return;}
+  delete catalog[key];
+  renderGrid();
+  log(`🗑 Source supprimée et blobs nettoyés : ${key}`);
 }
 
 // ── MAPPING CATÉGORIES WORDPRESS → CATS INTERNES ─────────────────
@@ -203,7 +618,7 @@ async function pGetApi(url, timeout=15000){
 async function fetchWpCategoryMap(base) {
   const map = {}; // wpCatId → [cats internes]
   try {
-    const r = await pGetApi(`${base}/wp-json/wp/v2/categories?per_page=100&_fields=id,slug,name`);
+    const r = await pGetApi(`${base}/wp-json/wp/v2/categories?per_page=100&_fields=id,slug,name`, 15000, true);
     if (!r.ok) return map;
     const cats = await r.json();
     for (const cat of cats) {
@@ -241,6 +656,52 @@ async function fetchWpCategoryMap(base) {
     console.warn('fetchWpCategoryMap:', e.message);
   }
   return map;
+}
+
+async function detectWordpressRestBase(base){
+  try{
+    const r = await pGetApi(`${base}/wp-json/wp/v2/types`, 15000, true);
+    if(!r.ok) return 'posts';
+    const types = await r.json();
+    const customRecipeTypes = Object.values(types||{}).filter(t => {
+      const slug = String(t?.slug || '').toLowerCase();
+      const name = String(t?.name || '').toLowerCase();
+      const restBase = String(t?.rest_base || '').toLowerCase();
+      const taxos = Array.isArray(t?.taxonomies) ? t.taxonomies.join(' ').toLowerCase() : '';
+      return restBase && restBase !== 'posts' && (
+        /recipe|recette/.test(slug) ||
+        /recipe|recette/.test(name) ||
+        /recipe|recette/.test(restBase) ||
+        /recipe|recette/.test(taxos)
+      );
+    });
+
+    let bestRestBase = 'posts';
+    let bestTotal = 0;
+
+    try{
+      const wp = await pGetApi(`${base}/wp-json/wp/v2/posts?per_page=1&_fields=link`, 15000, true);
+      if(wp.ok){
+        bestTotal = parseInt(wp.headers.get('X-WP-Total')||'0');
+      }
+    }catch(e){}
+
+    for(const customRecipeType of customRecipeTypes){
+      try{
+        const test = await pGetApi(`${base}/wp-json/wp/v2/${customRecipeType.rest_base}?per_page=1&_fields=link`, 15000, true);
+        if(!test.ok) continue;
+        const total = parseInt(test.headers.get('X-WP-Total')||'0');
+        if(total > bestTotal){
+          bestTotal = total;
+          bestRestBase = customRecipeType.rest_base;
+        }
+      }catch(e){}
+    }
+
+    return bestRestBase || 'posts';
+  } catch(e){
+    return 'posts';
+  }
 }
 
 // Cache des maps de catégories par site (évite de re-fetcher à chaque recette)
@@ -429,6 +890,73 @@ function dedupeRecipesForSource(recipes){
   return { recipes: merged, removed };
 }
 
+async function loadExistingSourceRecipes(key){
+  try{
+    const r = await fetch(`/.netlify/functions/rebuild-db?action=get&source=${encodeURIComponent(key)}`);
+    if(!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data) ? data : [];
+  } catch(e){
+    return [];
+  }
+}
+
+function buildExistingUrlSet(recipes){
+  const urls = new Set();
+  for(const recipe of (recipes||[])){
+    const url = normalizeRecipeUrl(recipe?.id || recipe?.url || '');
+    if(url) urls.add(url);
+  }
+  return urls;
+}
+
+async function fetchPageForScrape(url, timeout=15000){
+  for(let attempt=0; attempt<3; attempt++){
+    try{
+      const r = await pGet(url, timeout + attempt*4000, true);
+      if(r.ok){
+        const text = await r.text();
+        if(text && text.length > 1000) return { ok:true, text, status:r.status };
+      }
+      if(r.status && r.status < 500 && r.status !== 429) return { ok:false, status:r.status, text:'' };
+    }catch(e){}
+    await new Promise(r=>setTimeout(r, 600 + attempt*900));
+  }
+  return { ok:false, status:0, text:'' };
+}
+
+function decodeHtmlEntities(str=''){
+  return String(str||'')
+    .replace(/&#39;|&#039;/g,"'")
+    .replace(/&#8217;/g,"'")
+    .replace(/&quot;/g,'"')
+    .replace(/&amp;/g,'&')
+    .replace(/&nbsp;/g,' ')
+    .replace(/&eacute;/g,'é')
+    .replace(/&egrave;/g,'è')
+    .replace(/&ecirc;/g,'ê')
+    .replace(/&agrave;/g,'à')
+    .replace(/&ccedil;/g,'ç');
+}
+
+function findEditorialSectionIndex(html='', kind='ingredients', minIndex=0){
+  const label = kind==='ingredients'
+    ? '(?:Ingr[ée]dients?|Ingredients?)'
+    : '(?:Pr[ée]paration|Preparation|Instructions?|M[ée]thode|Method)';
+  const re = new RegExp(
+    `<(?:h[1-6]|p|div)[^>]*>[\\s\\S]{0,220}?${label}\\s*:?\\s*[\\s\\S]{0,220}?<\\/(?:h[1-6]|p|div)>`,
+    'ig'
+  );
+  const matches = [...html.matchAll(re)];
+  if(!matches.length) return -1;
+  for(const m of matches){
+    const idx = m.index ?? -1;
+    if(idx >= Math.max(20000, minIndex)) return idx;
+  }
+  const fallback = matches.find(m => (m.index ?? -1) >= minIndex);
+  return fallback ? (fallback.index ?? -1) : -1;
+}
+
 function extractRecipeFromHtml(html, pageUrl, srcKey, wpCats=[], catMap={}){
   const blocks = [...html.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
   for(const block of blocks){
@@ -524,112 +1052,260 @@ function extractRecipeFromHtml(html, pageUrl, srcKey, wpCats=[], catMap={}){
     } catch(e) {}
   }
 
+  // Fallback 3 : WP Recipe Maker (Rose Citron et sites similaires)
+  if(html.includes('wprm-recipe-container') || html.includes('wprm-recipe-name')){
+    try{
+      const start = html.indexOf('wprm-recipe-container');
+      const bloc = start >= 0 ? html.slice(start, start + 50000) : html;
+
+      const titleM = bloc.match(/<h2[^>]*class="[^"]*wprm-recipe-name[^"]*"[^>]*>([\s\S]*?)<\/h2>/i);
+      const title = titleM ? decodeHtmlEntities(titleM[1].replace(/<[^>]+>/g,'').trim()).slice(0,65) : '';
+      if(!title) return null;
+
+      const photoM = bloc.match(/class="[^"]*wprm-recipe-image[^"]*"[\s\S]*?<img[^>]+src="([^"]+)"/i);
+      const photo = photoM ? photoM[1] : null;
+
+      const ings = [...bloc.matchAll(/<li[^>]*class="[^"]*wprm-recipe-ingredient[^"]*"[^>]*>([\s\S]*?)<\/li>/gi)]
+        .map(m=>decodeHtmlEntities(m[1].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()))
+        .filter(Boolean)
+        .slice(0,12);
+      if(ings.length < 2) return null;
+
+      const steps = [...bloc.matchAll(/<div[^>]*class="[^"]*wprm-recipe-instruction-text[^"]*"[^>]*>([\s\S]*?)<\/div>/gi)]
+        .map(m=>decodeHtmlEntities(m[1].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()))
+        .filter(s=>s.length>5)
+        .slice(0,6);
+
+      const timeM = bloc.match(/(\d+)\s*(?:min|minutes?)/i);
+      const time = timeM ? parseInt(timeM[1], 10) : 0;
+
+      let cats = guessCats(title, ings, '', '');
+      if(wpCats.length && Object.keys(catMap).length) {
+        const wpMapped = wpCats.flatMap(id => catMap[id]||[]);
+        if(wpMapped.length) cats = [...new Set(wpMapped)];
+      }
+
+      const classification = classifyExternalRecipe(title, ings, cats, '', '');
+      return {
+        id:pageUrl, src:srcKey, title,
+        photo: photo ? photo.slice(0,300) : null,
+        time, ings, steps, cats, ...classification
+      };
+    }catch(e){}
+  }
+
+  // Fallback 4 : recette éditoriale classique (anciens billets Rose Citron)
+  try{
+    const contentStart = findEditorialSectionIndex(html, 'ingredients');
+    const prepStart = contentStart >= 0 ? findEditorialSectionIndex(html, 'prep', contentStart + 100) : -1;
+    if(contentStart >= 0 && prepStart > contentStart){
+      const titleM =
+        html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i) ||
+        html.match(/<title>([^<]+)<\/title>/i) ||
+        html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+      const title = titleM ? decodeHtmlEntities(titleM[1].replace(/<[^>]+>/g,'').replace(/\s*-\s*Rose Citron\s*$/i,'').trim()).slice(0,65) : '';
+      if(title){
+        const ingBloc = html.slice(contentStart, prepStart);
+        const afterPrep = html.slice(prepStart, prepStart + 16000);
+        let ings = [...ingBloc.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+          .map(m=>decodeHtmlEntities(m[1].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()))
+          .filter(Boolean);
+        if(ings.length < 3){
+          ings = [...ingBloc.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+            .map(m=>decodeHtmlEntities(m[1].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()))
+            .filter(s=>s.length>2 && !/(Ingr[ée]dients?|Ingredients?)\s*:?\s*$/i.test(s));
+        }
+        ings = ings.slice(0,12);
+        const steps = [...afterPrep.matchAll(/<(?:p|li)[^>]*>([\s\S]*?)<\/(?:p|li)>/gi)]
+          .map(m=>decodeHtmlEntities(m[1].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()))
+          .filter(s=>s.length>25 && !/^(Pr[ée]paration|Preparation|Instructions?|M[ée]thode|Method)\s*:?\s*$/i.test(s))
+          .slice(0,6);
+        if(ings.length >= 3 && steps.length >= 2){
+          const photoM = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i);
+          const photo = photoM ? photoM[1] : null;
+          const timeM =
+            html.match(/twitter:data2" content="(\d+)\s*minutes?/i) ||
+            html.match(/(\d+)\s*(?:min|minutes?)/i);
+          const time = timeM ? parseInt(timeM[1], 10) : 0;
+          let cats = guessCats(title, ings, '', '');
+          if(wpCats.length && Object.keys(catMap).length) {
+            const wpMapped = wpCats.flatMap(id => catMap[id]||[]);
+            if(wpMapped.length) cats = [...new Set(wpMapped)];
+          }
+          const classification = classifyExternalRecipe(title, ings, cats, '', '');
+          return {
+            id:pageUrl, src:srcKey, title,
+            photo: photo ? photo.slice(0,300) : null,
+            time, ings, steps, cats, ...classification
+          };
+        }
+      }
+    }
+  }catch(e){}
+
   return null;
 }
 
-async function scrapeWordpress(key, src){
+async function scrapeWordpress(key, src, existingUrls = new Set()){
   const base = src.url;
+  const restBase = src.wpRestBase || await detectWordpressRestBase(base);
+  const isDefaultPosts = restBase === 'posts';
+  const maxPages = Math.max(1, Math.ceil((src.maxRecipes || 5000) / 50));
 
   // Charger le mapping catégories WP → cats internes (une seule fois par site)
-  if (!_wpCatMapCache[key]) {
+  if (isDefaultPosts && !_wpCatMapCache[key]) {
     log(`  → Chargement des catégories WP…`);
     _wpCatMapCache[key] = await fetchWpCategoryMap(base);
     log(`  → ${Object.keys(_wpCatMapCache[key]).length} catégories mappées`);
   }
-  const catMap = _wpCatMapCache[key];
+  const catMap = _wpCatMapCache[key] || {};
+  log(`  → Endpoint WordPress utilisé : ${restBase}`);
 
   // Récupérer liens + catégories WP de chaque post en une seule requête
   const allPosts = [];
   let page=1, totalPages=1;
-  while(page <= Math.min(totalPages, 20)){
+  while(page <= Math.min(totalPages, maxPages)){
     try {
-      const r = await pGetApi(`${base}/wp-json/wp/v2/posts?per_page=50&page=${page}&_fields=link,categories`);
+      const fields = isDefaultPosts ? 'link,categories' : 'link';
+      const r = await pGetApi(`${base}/wp-json/wp/v2/${restBase}?per_page=50&page=${page}&_fields=${fields}`, 15000, true);
       if(!r.ok) break;
       if(page===1) totalPages = parseInt(r.headers.get('X-WP-TotalPages')||'1');
       const posts = await r.json();
       if(!Array.isArray(posts)||!posts.length) break;
-      posts.forEach(p=>{ if(p.link) allPosts.push({link:p.link, wpCats:p.categories||[]}); });
+      posts.forEach(p=>{ if(p.link) allPosts.push({link:p.link, wpCats:isDefaultPosts ? (p.categories||[]) : []}); });
       page++;
     } catch(e){ break; }
   }
   log(`  → ${allPosts.length} articles trouvés`);
 
   const results = [];
-  for(let i=0; i<allPosts.length; i+=5){
-    const batch = allPosts.slice(i,i+5);
+  let skippedExisting = 0;
+  let failedFetches = 0;
+  for(let i=0; i<allPosts.length; i+=SCRAPE_CONCURRENCY){
+    const batch = allPosts.slice(i,i+SCRAPE_CONCURRENCY);
     await Promise.all(batch.map(async ({link, wpCats})=>{
       try {
-        const r = await pGet(link, 15000);
-        if(!r.ok) return;
-        const recipe = extractRecipeFromHtml(await r.text(), link, key, wpCats, catMap);
+        if(existingUrls.has(normalizeRecipeUrl(link))){
+          skippedExisting++;
+          return;
+        }
+        const page = await fetchPageForScrape(link, 15000);
+        if(!page.ok){ failedFetches++; return; }
+        const recipe = extractRecipeFromHtml(page.text, link, key, wpCats, catMap);
         if(recipe) results.push(recipe);
       } catch(e){}
     }));
     if(i%50===0 && i>0) log(`  → ${results.length} recettes extraites…`);
-    await new Promise(r=>setTimeout(r,100));
+    await new Promise(r=>setTimeout(r,180));
   }
+  if(skippedExisting) log(`  → ${skippedExisting} recettes déjà indexées ignorées`);
+  if(failedFetches) log(`  → ${failedFetches} pages non lues ou bloquées`);
   return results;
 }
 
-async function scrapeBlogger(key, src){
+async function scrapeBlogger(key, src, existingUrls = new Set()){
   const base = src.url;
   const allLinks = [];
-  for(let start=1; start<=500; start+=25){
+  const max = src.maxRecipes || 2000;
+  for(let start=1; start<=max; start+=25){
     try {
-      const r = await pGetApi(`${base}/feeds/posts/default?alt=rss&max-results=25&start-index=${start}`);
+      const r = await pGetApi(`${base}/feeds/posts/default?alt=rss&max-results=25&start-index=${start}`, 15000, true);
       if(!r.ok) break;
       const text = await r.text();
       const links = [...text.matchAll(/<link>(https?:\/\/[^<]+)<\/link>/g)]
         .map(m=>m[1]).filter(l=>l!==base&&l!==base+'/');
       if(!links.length) break;
       allLinks.push(...links);
-      if(allLinks.length>=500) break;
+      if(allLinks.length>=max) break;
     } catch(e){ break; }
   }
   log(`  → ${allLinks.length} articles trouvés`);
   const results = [];
-  for(let i=0; i<allLinks.length; i+=5){
-    await Promise.all(allLinks.slice(i,i+5).map(async link=>{
+  let skippedExisting = 0;
+  let failedFetches = 0;
+  for(let i=0; i<allLinks.length; i+=SCRAPE_CONCURRENCY){
+    await Promise.all(allLinks.slice(i,i+SCRAPE_CONCURRENCY).map(async link=>{
       try {
-        const r = await pGet(link, 15000);
-        if(!r.ok) return;
-        const recipe = extractRecipeFromHtml(await r.text(), link, key);
+        if(existingUrls.has(normalizeRecipeUrl(link))){
+          skippedExisting++;
+          return;
+        }
+        const page = await fetchPageForScrape(link, 15000);
+        if(!page.ok){ failedFetches++; return; }
+        const recipe = extractRecipeFromHtml(page.text, link, key);
         if(recipe) results.push(recipe);
       } catch(e){}
     }));
-    await new Promise(r=>setTimeout(r,100));
+    await new Promise(r=>setTimeout(r,180));
   }
+  if(skippedExisting) log(`  → ${skippedExisting} recettes déjà indexées ignorées`);
+  if(failedFetches) log(`  → ${failedFetches} pages non lues ou bloquées`);
   return results;
 }
 
-async function scrapeSitemap(key, src){
-  const allLinks = [];
+async function scrapeSitemap(key, src, existingUrls = new Set()){
   const max = src.maxRecipes || 99999;
-  for(const smUrl of (src.sitemaps||[])){
+  const seenSitemaps = new Set();
+  const seenUrls = new Set();
+  const allLinks = [];
+
+  async function collectFromSitemap(smUrl, depth=0){
+    if(!smUrl || seenSitemaps.has(smUrl) || depth > 3 || allLinks.length >= max) return;
+    seenSitemaps.add(smUrl);
     try {
-      const r = await pGet(smUrl, 20000);
-      if(!r.ok) continue;
+      const r = await pGet(smUrl, 20000, true);
+      if(!r.ok) return;
       const text = await r.text();
-      const urls = [...text.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)].map(m=>m[1]);
-      allLinks.push(...urls);
-      if(allLinks.length>=max) break;
-    } catch(e){ continue; }
+      const locs = [...text.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)].map(m=>m[1]);
+      if(!locs.length) return;
+
+      if(/<sitemapindex/i.test(text)){
+        const preferred = locs.filter(u=>/recette|recipe/i.test(u));
+        const queue = preferred.length ? preferred : locs;
+        for(const nested of queue){
+          await collectFromSitemap(nested, depth+1);
+          if(allLinks.length >= max) break;
+        }
+        return;
+      }
+
+      for(const link of locs){
+        if(seenUrls.has(link)) continue;
+        seenUrls.add(link);
+        allLinks.push(link);
+        if(allLinks.length >= max) break;
+      }
+    } catch(e){}
   }
+
+  for(const smUrl of (src.sitemaps||[])){
+    await collectFromSitemap(smUrl, 0);
+    if(allLinks.length>=max) break;
+  }
+
   const limited = allLinks.slice(0,max);
   log(`  → ${limited.length} URLs en sitemap`);
   const results = [];
-  for(let i=0; i<limited.length; i+=8){
-    await Promise.all(limited.slice(i,i+8).map(async link=>{
+  let skippedExisting = 0;
+  let failedFetches = 0;
+  for(let i=0; i<limited.length; i+=SCRAPE_CONCURRENCY){
+    await Promise.all(limited.slice(i,i+SCRAPE_CONCURRENCY).map(async link=>{
       try {
-        const r = await pGet(link, 12000);
-        if(!r.ok) return;
-        const recipe = extractRecipeFromHtml(await r.text(), link, key);
+        if(existingUrls.has(normalizeRecipeUrl(link))){
+          skippedExisting++;
+          return;
+        }
+        const page = await fetchPageForScrape(link, 12000);
+        if(!page.ok){ failedFetches++; return; }
+        const recipe = extractRecipeFromHtml(page.text, link, key);
         if(recipe) results.push(recipe);
       } catch(e){}
     }));
     if(i%100===0 && i>0) log(`  → ${results.length} recettes extraites…`);
-    await new Promise(r=>setTimeout(r,80));
+    await new Promise(r=>setTimeout(r,180));
   }
+  if(skippedExisting) log(`  → ${skippedExisting} recettes déjà indexées ignorées`);
+  if(failedFetches) log(`  → ${failedFetches} pages non lues ou bloquées`);
   return results;
 }
 
@@ -644,38 +1320,55 @@ async function saveToBlobs(key, recipes){
   return await r.json();
 }
 
-// ── REBUILD UNE SOURCE ───────────────────────────────────────────
-async function rebuildOne(key){
+// ── REBUILD / MAJ UNE SOURCE ─────────────────────────────────────
+async function rebuildSource(key, mode='replace'){
   if(busy){ log('⚠️ Une reconstruction est déjà en cours.'); return; }
   busy = true;
   setAllBtns(true);
-  setCardStatus(key, 'running', '⏳ En cours…');
+  setCardStatus(key, 'running', mode==='update' ? '⏳ Mise à jour…' : '⏳ Reconstruction…');
 
   const src = catalog[key];
-  log(`\n🔄 ${src.name} (${src.type})…`);
+  log(`\n🔄 ${src.name} (${src.type}) · ${mode==='update' ? 'MAJ' : 'RAZ'}…`);
 
   try {
-    let recipes = [];
-    if(src.type==='wordpress')      recipes = await scrapeWordpress(key, src);
-    else if(src.type==='blogger')   recipes = await scrapeBlogger(key, src);
-    else if(src.type==='sitemap')   recipes = await scrapeSitemap(key, src);
+    const chosenLimit = askLargeSourceLimit(src, mode);
+    if(chosenLimit===null){
+      log('  ⏹️ Opération annulée.');
+      setCardStatus(key, src.cached ? 'ok' : 'none', src.cached ? `✅ ${src.count.toLocaleString('fr')} recettes` : '⚠️ Non indexé');
+      return;
+    }
+    const effectiveSrc = chosenLimit===undefined ? {...src, maxRecipes: undefined} : {...src, maxRecipes: chosenLimit};
+    if(sourceEstimatedCount(src) > LARGE_SOURCE_THRESHOLD){
+      log(`  → volume estimé : ${formatSourceEstimate(src)} · limite utilisée : ${effectiveSrc.maxRecipes ? effectiveSrc.maxRecipes.toLocaleString('fr') : 'tout'}`);
+    }
+    const existingRecipes = mode==='update' ? await loadExistingSourceRecipes(key) : [];
+    const existingUrls = mode==='update' ? buildExistingUrlSet(existingRecipes) : new Set();
+    if(mode==='update' && existingRecipes.length) log(`  → ${existingRecipes.length} recettes déjà indexées, mode mise à jour`);
+    if(mode==='replace' && catalog[key]?.cached) log(`  → reconstruction complète : les anciennes recettes seront remplacées`);
 
-    const rawCount = recipes.length;
-    const deduped = dedupeRecipesForSource(recipes);
-    recipes = deduped.recipes;
+    let newRecipes = [];
+    if(src.type==='wordpress')      newRecipes = await scrapeWordpress(key, effectiveSrc, existingUrls);
+    else if(src.type==='blogger')   newRecipes = await scrapeBlogger(key, effectiveSrc, existingUrls);
+    else if(src.type==='sitemap')   newRecipes = await scrapeSitemap(key, effectiveSrc, existingUrls);
 
-    log(`  → ${rawCount} recettes scrapées${deduped.removed?` · ${deduped.removed} doublon${deduped.removed>1?'s':''} supprimé${deduped.removed>1?'s':''}`:''}, envoi au serveur…`);
+    const mergedBeforeDedupe = mode==='update' && existingRecipes.length ? [...existingRecipes, ...newRecipes] : newRecipes;
+    const rawCount = newRecipes.length;
+    const deduped = dedupeRecipesForSource(mergedBeforeDedupe);
+    const recipes = deduped.recipes;
+    const addedCount = Math.max(0, recipes.length - existingRecipes.length);
+
+    log(`  → ${rawCount} ${mode==='update' ? 'nouvelles ' : ''}recettes scrapées${deduped.removed?` · ${deduped.removed} doublon${deduped.removed>1?'s':''} supprimé${deduped.removed>1?'s':''}`:''}, envoi au serveur…`);
     const res = await saveToBlobs(key, recipes);
-    log(`  ✅ ${src.name} : ${res.count} recettes sauvegardées.`);
+    log(`  ✅ ${src.name} : ${res.count} recettes sauvegardées${mode==='update' && existingRecipes.length?` · ${addedCount} ajoutées`:''}.`);
     setCardStatus(key, 'ok', `✅ ${res.count.toLocaleString('fr')} recettes · aujourd'hui`);
     catalog[key] = {...catalog[key], cached:true, count:res.count, updatedAt:Date.now()};
   } catch(e){
     log(`  ❌ Erreur : ${e.message}`);
     setCardStatus(key, 'error', `❌ Erreur : ${e.message.slice(0,50)}`);
+  } finally {
+    busy = false;
+    setAllBtns(false);
   }
-
-  busy = false;
-  setAllBtns(false);
 }
 
 // ── REBUILD TOUT ─────────────────────────────────────────────────
@@ -685,7 +1378,7 @@ async function rebuildAll(){
   log('🚀 Reconstruction complète démarrée…');
   const keys = Object.keys(catalog);
   for(const key of keys){
-    await rebuildOne(key);
+    await rebuildSource(key, 'replace');
   }
   log('\n🎉 Toutes les sources ont été traitées.');
 }

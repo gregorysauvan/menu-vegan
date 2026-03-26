@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { getStore } from '@netlify/blobs';
 
 const STORE_NAME = 'pages-cache-v2';
@@ -10,7 +11,7 @@ export default async (req, context) => {
   if (!targetUrl) return new Response('URL manquante', { status: 400 });
 
   const store = getStore(STORE_NAME);
-  const cacheKey = 'p-' + Buffer.from(targetUrl).toString('base64').replace(/[^a-z0-9]/gi, '').slice(0, 60);
+  const cacheKey = 'p-' + createHash('sha256').update(targetUrl).digest('hex');
 
   if (!force) {
     try {
